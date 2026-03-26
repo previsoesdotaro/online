@@ -344,46 +344,42 @@
                 </div>
             </div>
 
-            <!-- Metas / Comissões Section (From Photo) -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="bg-white rounded-lg shadow-sm border border-blue-200">
-                    <div class="bg-blue-600 text-white p-4 rounded-t-lg">
-                        <h4 class="font-bold text-lg">Vales</h4>
-                    </div>
-                    <div class="p-6 space-y-4">
-                        <div class="flex justify-between items-center border-b pb-2">
-                            <span class="text-gray-600">Total de comissões</span>
-                            <span id="total-comissoes" class="font-bold text-blue-600">R$ 0,00</span>
-                        </div>
-                        <div class="flex justify-between items-center border-b pb-2">
-                            <span class="text-gray-600">Meta</span>
-                            <span class="font-bold text-green-600">R$ 4.000,00</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-gray-600 font-bold">À receber</span>
-                            <span id="total-receber" class="font-bold text-red-600">R$ 0,00</span>
-                        </div>
-                    </div>
+            <!-- Metas / Comissões Section (Novo Layout conforme foto) -->
+            <div class="bg-white rounded-lg shadow-sm border border-blue-200 overflow-hidden">
+                <div class="bg-blue-600 text-white p-3">
+                    <h4 class="font-bold text-sm uppercase tracking-wider">Metas</h4>
                 </div>
-
-                <div class="bg-white rounded-lg shadow-sm border border-blue-200">
-                    <div class="bg-blue-600 text-white p-4 rounded-t-lg">
-                        <h4 class="font-bold text-lg">Metas</h4>
-                    </div>
-                    <div class="p-6">
-                        <div class="grid grid-cols-2 gap-4 text-center">
-                            <div class="bg-blue-50 p-4 rounded">
-                                <p class="text-xs text-blue-600 font-bold uppercase">Mensal</p>
-                                <p id="mensal-realizado" class="text-xl font-bold">R$ 0,00</p>
-                                <p class="text-xs text-gray-500 mt-1">Valor Realizado</p>
-                            </div>
-                            <div class="bg-green-50 p-4 rounded">
-                                <p class="text-xs text-green-600 font-bold uppercase">Diário</p>
-                                <p class="text-xl font-bold">R$ 132,00</p>
-                                <p class="text-xs text-gray-500 mt-1">Meta do Dia</p>
-                            </div>
-                        </div>
-                    </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-[11px] border-collapse">
+                        <thead>
+                            <tr class="bg-gray-100 text-gray-500 uppercase font-bold border-b">
+                                <th class="px-4 py-2 border-r">Comissões</th>
+                                <th class="px-4 py-2 text-center bg-blue-600 text-white border-r">Mensal</th>
+                                <th class="px-4 py-2 text-center border-r">Valor a Atingir</th>
+                                <th class="px-4 py-2 text-center border-r">Valor Realizado</th>
+                                <th class="px-4 py-2 text-center border-r">Valor Faltante</th>
+                                <th class="px-4 py-2 text-center bg-blue-600 text-white border-r">Diário</th>
+                                <th class="px-4 py-2 text-center border-r">Meta de Hoje</th>
+                                <th class="px-4 py-2 text-center border-r">Valor Diário</th>
+                                <th class="px-4 py-2 text-center">Valor Faltante</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y font-medium text-gray-700">
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3 border-r bg-gray-50">
+                                    <span class="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-[9px] font-black uppercase">TOTAL GERAL</span>
+                                </td>
+                                <td class="px-4 py-3 border-r bg-blue-50/30"></td>
+                                <td class="px-4 py-3 border-r text-center">R$ 4.000,00</td>
+                                <td id="goal-mensal-realizado" class="px-4 py-3 border-r text-center font-bold text-blue-700">R$ 0,00</td>
+                                <td id="goal-mensal-faltante" class="px-4 py-3 border-r text-center text-red-500">R$ 4.000,00</td>
+                                <td class="px-4 py-3 border-r bg-blue-50/30"></td>
+                                <td class="px-4 py-3 border-r text-center">R$ 132,00</td>
+                                <td id="goal-diario-realizado" class="px-4 py-3 border-r text-center font-bold text-green-600">R$ 0,00</td>
+                                <td id="goal-diario-faltante" class="px-4 py-3 text-center text-red-500">R$ 132,00</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -727,21 +723,44 @@
                 c.status === 'finished'
             );
             
-            // Valor total do minuto: R$ 2,00. Comissão do Tarólogo: 25% (R$ 0,50)
-            const totalMinutes = myFinishedConsults.reduce((acc, c) => acc + (c.minutes || 0), 0);
-            const earnings = totalMinutes * 0.50;
+            // Lógica de Comissão: R$ 0,50 por minuto
+            const calculateEarnings = (consults) => consults.reduce((acc, c) => acc + (c.minutes || 0) * 0.50, 0);
+
+            // 1. Total Mensal (Considerando todas as finalizadas no sistema para este tarólogo)
+            const mensalEarnings = calculateEarnings(myFinishedConsults);
             
+            // 2. Total Diário (Apenas as finalizadas hoje)
+            const today = new Date().toLocaleDateString();
+            const dailyConsults = myFinishedConsults.filter(c => new Date(c.created_at).toLocaleDateString() === today);
+            const dailyEarnings = calculateEarnings(dailyConsults);
+
+            // Metas Fixas
+            const META_MEN_VALOR = 4000.00;
+            const META_DIA_VALOR = 132.00;
+
+            // Atualiza Sidebar
             const display = document.getElementById('sidebar-earnings');
-            if (display) display.textContent = `R$ ${earnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            if (display) display.textContent = `R$ ${mensalEarnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
             
-            // Update Valleys/Metas if in that view
-            const totalComissionEl = document.getElementById('total-comissoes');
-            const totalReceberEl = document.getElementById('total-receber');
-            const mensalRealizadoEl = document.getElementById('mensal-realizado');
-            
-            if (totalComissionEl) totalComissionEl.textContent = `R$ ${earnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-            if (totalReceberEl) totalReceberEl.textContent = `R$ ${earnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-            if (mensalRealizadoEl) mensalRealizadoEl.textContent = `R$ ${earnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            // Atualiza Tabela de Metas (Novo Layout)
+            const goalMensalRealizado = document.getElementById('goal-mensal-realizado');
+            const goalMensalFaltante = document.getElementById('goal-mensal-faltante');
+            const goalDiarioRealizado = document.getElementById('goal-diario-realizado');
+            const goalDiarioFaltante = document.getElementById('goal-diario-faltante');
+
+            if (goalMensalRealizado) {
+                goalMensalRealizado.textContent = `R$ ${mensalEarnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                const faltanteMensal = Math.max(0, META_MEN_VALOR - mensalEarnings);
+                goalMensalFaltante.textContent = `R$ ${faltanteMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                goalMensalFaltante.className = `px-4 py-3 border-r text-center ${faltanteMensal === 0 ? 'text-green-600 font-bold' : 'text-red-500'}`;
+            }
+
+            if (goalDiarioRealizado) {
+                goalDiarioRealizado.textContent = `R$ ${dailyEarnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                const faltanteDiario = Math.max(0, META_DIA_VALOR - dailyEarnings);
+                goalDiarioFaltante.textContent = `R$ ${faltanteDiario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                goalDiarioFaltante.className = `px-4 py-3 text-center ${faltanteDiario === 0 ? 'text-green-600 font-bold' : 'text-red-500'}`;
+            }
         }
 
         // Auth Logic
