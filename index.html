@@ -608,11 +608,15 @@
                 store.users = users || [];
                 store.consultations = consultations || [];
                 
-                // Refresh currentUser status from DB
+                // Refresh currentUser data from DB (Status and Goals)
                 if (store.currentUser) {
                     const dbUser = store.users.find(u => u.id === store.currentUser.id);
                     if (dbUser) {
+                        // Sincroniza status, metas e outros campos importantes
                         store.currentUser.status = dbUser.status || 'offline';
+                        store.currentUser.monthly_goal = dbUser.monthly_goal || 0;
+                        store.currentUser.daily_goal = dbUser.daily_goal || 0;
+                        
                         localStorage.setItem('tarot_user', JSON.stringify(store.currentUser));
                     }
                 }
@@ -738,13 +742,16 @@
             const mensalEarnings = calculateEarnings(mensalConsults);
             
             // 2. Total Diário (Apenas as finalizadas hoje)
-            const today = now.toLocaleDateString();
-            const dailyConsults = myFinishedConsults.filter(c => new Date(c.created_at).toLocaleDateString() === today);
+            const todayStr = now.toLocaleDateString('pt-BR');
+            const dailyConsults = myFinishedConsults.filter(c => {
+                const date = new Date(c.created_at);
+                return date.toLocaleDateString('pt-BR') === todayStr;
+            });
             const dailyEarnings = calculateEarnings(dailyConsults);
 
             // Metas Dinâmicas (Vem do Banco de Dados)
-            const META_MEN_VALOR = store.currentUser.monthly_goal || 0;
-            const META_DIA_VALOR = store.currentUser.daily_goal || 0;
+            const META_MEN_VALOR = parseFloat(store.currentUser.monthly_goal || 0);
+            const META_DIA_VALOR = parseFloat(store.currentUser.daily_goal || 0);
 
             // Atualiza Sidebar
             const display = document.getElementById('sidebar-earnings');
@@ -1776,6 +1783,9 @@
             // Update Status Card in this view
             const currentStatus = store.currentUser.status || 'online';
             updateStatusUI(currentStatus);
+            
+            // Força atualização dos ganhos e metas ao abrir a visão de consultas
+            updateEarningsDisplay();
 
             const tablePending = document.getElementById('tarologo-assigned-consultations');
             const tableActive = document.getElementById('tarologo-active-consultations-table');
