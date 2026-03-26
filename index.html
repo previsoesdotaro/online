@@ -160,24 +160,29 @@
 
         <div class="bg-white rounded-lg shadow-sm border border-blue-200">
             <div class="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
-                <h4 class="font-bold text-lg">Consultas em Aberto</h4>
-                <button onclick="openNewConsultationModal()" class="bg-blue-500 hover:bg-blue-400 px-4 py-2 rounded text-sm font-medium transition flex items-center gap-2">
-                    <i class="fas fa-plus"></i> Nova Consulta
-                </button>
+                <h4 class="font-bold text-lg">Últimas consultas realizadas</h4>
+                <div class="flex gap-2">
+                    <button onclick="renderView('admin-dashboard')" class="bg-blue-500 hover:bg-blue-400 px-3 py-1 rounded text-xs flex items-center gap-2">
+                        <i class="fas fa-sync-alt"></i> Atualizar
+                    </button>
+                    <button onclick="openNewConsultationModal()" class="bg-blue-500 hover:bg-blue-400 px-4 py-2 rounded text-sm font-medium transition flex items-center gap-2">
+                        <i class="fas fa-plus"></i> Nova Consulta
+                    </button>
+                </div>
             </div>
             <div class="overflow-x-auto">
-                <table class="w-full text-left">
-                    <thead class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
-                        <tr>
-                            <th class="px-6 py-4">ID</th>
-                            <th class="px-6 py-4">CLIENTE</th>
-                            <th class="px-6 py-4">TEMPO (MIN)</th>
-                            <th class="px-6 py-4">TARÓLOGO</th>
-                            <th class="px-6 py-4">STATUS</th>
-                            <th class="px-6 py-4">AÇÕES</th>
+                <table class="w-full text-left text-[11px] border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100 text-gray-500 uppercase font-bold border-b">
+                            <th class="px-4 py-2 border-r">ID</th>
+                            <th class="px-4 py-2 border-r">CLIENTE / TARÓLOGO</th>
+                            <th class="px-4 py-2 text-center border-r">INICIADA EM</th>
+                            <th class="px-4 py-2 text-center border-r">DURAÇÃO</th>
+                            <th class="px-4 py-2 text-center border-r">COMISSÃO</th>
+                            <th class="px-4 py-2 text-center">STATUS / AÇÕES</th>
                         </tr>
                     </thead>
-                    <tbody id="admin-consultations-table" class="divide-y">
+                    <tbody id="admin-consultations-table" class="divide-y font-medium text-gray-700">
                         <!-- Rows injected by JS -->
                     </tbody>
                 </table>
@@ -647,8 +652,9 @@
                 updateEarningsDisplay();
                 
                 // Se o administrador estiver na aba de tarólogos, atualiza a tabela
-                if (store.currentUser && store.currentUser.role === 'admin' && store.currentView === 'admin-tarologos') {
-                    renderAdminTarologosTable();
+                if (store.currentUser && store.currentUser.role === 'admin') {
+                    if (store.currentView === 'admin-tarologos') renderAdminTarologosTable();
+                    if (store.currentView === 'admin-dashboard') renderAdminConsultationsTable();
                 }
             } catch (err) {
                 console.error("Erro ao carregar dados:", err);
@@ -1491,36 +1497,83 @@
         }
 
         // Admin Views
+        let adminTimerInterval = null;
         function initAdminDashboard() {
             document.getElementById('stat-total-clients').textContent = store.clients.length;
             document.getElementById('stat-today-consults').textContent = store.consultations.length;
             document.getElementById('stat-online-tarologos').textContent = store.users.filter(u => u.role === 'tarologo' && u.status === 'online').length;
 
+            renderAdminConsultationsTable();
+            
+            // Inicia um loop para atualizar o tempo das consultas ativas no painel do admin
+            if (adminTimerInterval) clearInterval(adminTimerInterval);
+            adminTimerInterval = setInterval(() => {
+                if (store.currentView === 'admin-dashboard') {
+                    renderAdminConsultationsTable();
+                } else {
+                    clearInterval(adminTimerInterval);
+                    adminTimerInterval = null;
+                }
+            }, 5000); // Atualiza a cada 5 segundos no admin para não pesar
+        }
+
+        function renderAdminConsultationsTable() {
             const table = document.getElementById('admin-consultations-table');
-            // Mostra todas as consultas que não foram deletadas (para o admin poder editar as finalizadas também se precisar)
+            if (!table) return;
+
+            // Mostra todas as consultas ordenadas por data (mais recentes primeiro)
             const allConsultations = [...store.consultations].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
             table.innerHTML = allConsultations.map(c => {
                 const client = store.clients.find(cl => cl.id === c.client_id);
                 const tarologo = store.users.find(u => u.id === c.tarologo_id);
+                const comissao = (c.minutes || 0) * 0.50;
+                const iniciadaEm = new Date(c.created_at).toLocaleString('pt-BR', { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                // Lógica de exibição de duração
+                let duracaoStr = `${c.minutes} MINUTO(S)`;
+                if (c.status === 'active') {
+                    const mins = Math.floor(c.remaining_seconds / 60);
+                    const secs = c.remaining_seconds % 60;
+                    duracaoStr = `<span class="text-blue-600 animate-pulse font-black"><i class="fas fa-clock mr-1"></i>${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}</span>`;
+                } else if (c.status === 'paused') {
+                    duracaoStr = `<span class="text-orange-500 font-bold italic">PAUSADO</span>`;
+                }
+
                 return `
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 font-mono text-sm">#${c.id.substring(0,8)}</td>
-                        <td class="px-6 py-4 font-medium">${client ? client.name : 'N/A'}</td>
-                        <td class="px-6 py-4 font-bold text-indigo-600">${c.minutes} min</td>
-                        <td class="px-6 py-4 font-medium text-purple-700">${tarologo ? tarologo.name : 'Não atribuído'}</td>
-                        <td class="px-6 py-4">
-                            <span class="px-2 py-1 rounded-full text-xs font-bold ${
-                                c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 
-                                c.status === 'active' ? 'bg-green-100 text-green-700' : 
-                                c.status === 'paused' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700'}">
-                                ${c.status === 'pending' ? 'Aguardando' : (c.status === 'active' ? 'Em Atendimento' : (c.status === 'paused' ? 'Pausado' : 'Finalizada'))}
-                            </span>
+                    <tr class="hover:bg-gray-50 border-b">
+                        <td class="px-4 py-3 border-r font-bold text-gray-400">#${c.id.substring(0,6)}</td>
+                        <td class="px-4 py-3 border-r">
+                            <div class="font-black text-gray-800 uppercase text-[12px]">${client ? client.name : 'N/A'}</div>
+                            <div class="text-[10px] text-purple-600 font-bold uppercase"><i class="fas fa-user-md mr-1"></i>${tarologo ? tarologo.name : 'Não atribuído'}</div>
+                            <button class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[9px] font-bold mt-1 flex items-center gap-1 border border-blue-100 hover:bg-blue-100 transition">
+                                <i class="fas fa-phone-alt"></i> REAGENDAR
+                            </button>
                         </td>
-                        <td class="px-6 py-4 flex gap-3">
-                            <button onclick="openEditConsultationModal('${c.id}')" class="text-blue-600 hover:text-blue-800" title="Editar Tempo da Consulta"><i class="fas fa-edit"></i></button>
-                            <button onclick="copyClientLink('${c.id}')" class="text-indigo-600 hover:text-indigo-800" title="Copiar Link do Cliente"><i class="fas fa-link"></i></button>
-                            <button onclick="deleteConsultation('${c.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                        <td class="px-4 py-3 border-r text-center text-gray-500 font-mono">${iniciadaEm}</td>
+                        <td class="px-4 py-3 border-r text-center font-bold text-gray-600 text-[12px]">${duracaoStr}</td>
+                        <td class="px-4 py-3 border-r text-center font-black text-blue-700 text-[12px]">R$ ${comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td class="px-4 py-3">
+                            <div class="flex flex-col items-center gap-2">
+                                <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                                    c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 
+                                    c.status === 'active' ? 'bg-green-100 text-green-700' : 
+                                    c.status === 'paused' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700'}">
+                                    ${c.status === 'pending' ? 'Aguardando' : (c.status === 'active' ? 'Em Atendimento' : (c.status === 'paused' ? 'Pausado' : 'Finalizada'))}
+                                </span>
+                                <div class="flex gap-2">
+                                    <button onclick="openEditConsultationModal('${c.id}')" class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 border border-blue-100" title="Editar Tempo"><i class="fas fa-edit text-xs"></i></button>
+                                    <button onclick="copyClientLink('${c.id}')" class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center hover:bg-indigo-100 border border-indigo-100" title="Link do Cliente"><i class="fas fa-link text-xs"></i></button>
+                                    <button onclick="deleteConsultation('${c.id}')" class="w-7 h-7 rounded-lg bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-100 border border-red-100" title="Excluir"><i class="fas fa-trash text-xs"></i></button>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                 `;
