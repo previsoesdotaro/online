@@ -292,20 +292,46 @@
                 </div>
             </div>
 
-            <!-- Consultas em Aberto -->
-            <div class="bg-white rounded-lg shadow-sm border border-blue-200">
-                <div class="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
-                    <h4 class="font-bold text-lg">Novas Consultas para você</h4>
-                    <button onclick="renderView('tarologo-consultas')" class="bg-blue-500 hover:bg-blue-400 px-3 py-1 rounded text-sm flex items-center gap-2">
+            <!-- Consultas em Andamento (Novo Estilo da Foto) -->
+            <div id="active-consultations-section" class="bg-white rounded-lg shadow-sm border border-blue-200 hidden">
+                <div class="bg-blue-600 text-white p-3 rounded-t-lg">
+                    <h4 class="font-bold text-sm uppercase tracking-wider">Consultas em andamento</h4>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-[11px]">
+                        <thead class="bg-gray-50 text-gray-400 uppercase font-bold border-b">
+                            <tr>
+                                <th class="px-4 py-3">ID</th>
+                                <th class="px-4 py-3">CLIENTE</th>
+                                <th class="px-4 py-3">INICIADO</th>
+                                <th class="px-4 py-3">TEMPO DE CONSULTA</th>
+                                <th class="px-4 py-3">CORTESIA</th>
+                                <th class="px-4 py-3">PROMOÇÃO</th>
+                                <th class="px-4 py-3">MIN. PRÉ-PAGO</th>
+                                <th class="px-4 py-3">COMISSÃO</th>
+                                <th class="px-4 py-3 text-center">AÇÕES</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tarologo-active-consultations-table" class="divide-y">
+                            <!-- Injetado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Consultas em Aberto (Aguardando Início) -->
+            <div class="bg-white rounded-lg shadow-sm border border-indigo-200">
+                <div class="bg-indigo-600 text-white p-3 rounded-t-lg flex justify-between items-center">
+                    <h4 class="font-bold text-sm uppercase tracking-wider">Novas Consultas para você</h4>
+                    <button onclick="renderView('tarologo-consultas')" class="bg-indigo-500 hover:bg-indigo-400 px-3 py-1 rounded text-xs flex items-center gap-2">
                         <i class="fas fa-sync-alt"></i> Atualizar
                     </button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left">
-                        <thead class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
+                        <thead class="bg-gray-50 text-gray-500 uppercase text-[10px] font-bold border-b">
                             <tr>
                                 <th class="px-6 py-4">CLIENTE</th>
-                                <th class="px-6 py-4">CRÉDITOS (R$)</th>
                                 <th class="px-6 py-4">TEMPO (MIN)</th>
                                 <th class="px-6 py-4">TIPO</th>
                                 <th class="px-6 py-4 text-center">AÇÕES</th>
@@ -368,7 +394,20 @@
             Nenhuma consulta em andamento. Selecione uma na sua "Minha Lista" para começar.
         </div>
         
-        <div id="active-consultation-section" class="hidden h-[calc(100vh-160px)]">
+        <div id="active-consultation-section" class="hidden h-[calc(100vh-160px)] relative">
+            <!-- Overlay para Iniciar Atendimento (Manual) -->
+            <div id="start-consult-overlay" class="hidden absolute inset-0 z-[100] bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center rounded-lg border-2 border-dashed border-indigo-200 m-4 shadow-xl">
+                <div class="w-24 h-24 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-6 shadow-inner animate-pulse">
+                    <i class="fas fa-play text-4xl ml-2"></i>
+                </div>
+                <h3 class="text-3xl font-black text-indigo-900 mb-2">Pronto para começar?</h3>
+                <p class="text-gray-500 mb-8 max-w-md">O cliente já está aguardando ou a ligação está pronta. O tempo só começará a contar quando você clicar no botão abaixo.</p>
+                <button onclick="activateConsultationManual()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xl font-black py-6 px-12 rounded-2xl shadow-2xl shadow-indigo-200 transition-all active:scale-95 flex items-center gap-4 group">
+                    <i class="fas fa-bolt text-yellow-400 group-hover:scale-125 transition-transform"></i>
+                    INICIAR ATENDIMENTO AGORA
+                </button>
+            </div>
+
             <div class="flex flex-col md:flex-row gap-6 h-full">
                 <!-- Left Sidebar: Info & Control -->
                 <div class="md:w-1/4 flex flex-col items-center justify-between bg-white p-6 rounded-lg border border-gray-200 shadow-sm h-full overflow-y-auto">
@@ -830,6 +869,7 @@
             
             store.statusSubscription = supabaseClient
                 .channel('admin_global_status')
+                // 1. Monitora status dos usuários (online/offline/ocupado)
                 .on('postgres_changes', { 
                     event: 'UPDATE', 
                     schema: 'public', 
@@ -837,19 +877,51 @@
                 }, payload => {
                     console.log("STATUS UPDATE RECEIVED (GLOBAL ADMIN):", payload.new);
                     
-                    // Update global store
                     const userIdx = store.users.findIndex(u => u.id === payload.new.id);
                     if (userIdx !== -1) {
                         store.users[userIdx] = payload.new;
                         
-                        // Update UI if in relevant views
                         if (store.currentView === 'admin-dashboard') {
                             const activeCount = store.users.filter(u => u.role === 'tarologo' && u.status === 'online').length;
                             const statEl = document.getElementById('stat-online-tarologos');
                             if (statEl) statEl.textContent = activeCount;
+                            
+                            // Também re-renderiza a tabela para atualizar nomes/status se necessário
+                            initAdminDashboard();
                         } else if (store.currentView === 'admin-tarologos') {
-                            renderAdminTarologosTable(); // Re-render the table
+                            renderAdminTarologosTable();
                         }
+                    }
+                })
+                // 2. Monitora status das consultas (Aguardando -> Em Atendimento)
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'consultas'
+                }, payload => {
+                    console.log("CONSULTA UPDATE RECEIVED (GLOBAL ADMIN):", payload.new);
+                    
+                    const consultIdx = store.consultations.findIndex(c => c.id === payload.new.id);
+                    if (consultIdx !== -1) {
+                        store.consultations[consultIdx] = payload.new;
+                    } else {
+                        store.consultations.push(payload.new);
+                    }
+
+                    if (store.currentView === 'admin-dashboard') {
+                        initAdminDashboard();
+                    }
+                })
+                // 3. Monitora NOVAS consultas
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'consultas'
+                }, payload => {
+                    console.log("NOVA CONSULTA RECEBIDA (GLOBAL ADMIN):", payload.new);
+                    store.consultations.push(payload.new);
+                    if (store.currentView === 'admin-dashboard') {
+                        initAdminDashboard();
                     }
                 })
                 .subscribe();
@@ -1360,7 +1432,7 @@
                         <td class="px-6 py-4 font-medium text-purple-700">${tarologo ? tarologo.name : 'Não atribuído'}</td>
                         <td class="px-6 py-4">
                             <span class="px-2 py-1 rounded-full text-xs font-bold ${c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}">
-                                ${c.status === 'pending' ? 'Aguardando' : (c.status === 'active' ? 'Em Andamento' : 'Finalizada')}
+                                ${c.status === 'pending' ? 'Aguardando' : (c.status === 'active' ? 'Em Atendimento' : 'Finalizada')}
                             </span>
                         </td>
                         <td class="px-6 py-4">
@@ -1612,39 +1684,186 @@
             const currentStatus = store.currentUser.status || 'online';
             updateStatusUI(currentStatus);
 
-            const table = document.getElementById('tarologo-assigned-consultations');
-            // Show both 'pending' (new) and 'active' (in progress) consultations
-            const myConsults = store.consultations.filter(c => 
-                c.tarologo_id === store.currentUser.id && 
-                (c.status === 'pending' || c.status === 'active')
-            );
-            
-            table.innerHTML = myConsults.map(c => {
+            const tablePending = document.getElementById('tarologo-assigned-consultations');
+            const tableActive = document.getElementById('tarologo-active-consultations-table');
+            const activeSection = document.getElementById('active-consultations-section');
+
+            const myConsults = store.consultations.filter(c => c.tarologo_id === store.currentUser.id);
+            const pendingConsults = myConsults.filter(c => c.status === 'pending');
+            const activeConsults = myConsults.filter(c => c.status === 'active');
+
+            // 1. Renderizar Consultas Pendentes (Novas)
+            tablePending.innerHTML = pendingConsults.map(c => {
                 const client = store.clients.find(cl => cl.id === c.client_id);
-                // Comissão do Tarólogo: R$ 0,50 por minuto (25% de R$ 2,00)
-                const credits = (c.minutes || 0) * 0.50;
                 const typeIcon = c.type === 'phone' ? '📞 Telefone' : '💬 Chat';
-                const statusBadge = c.status === 'active' 
-                    ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold uppercase ml-2">Em curso</span>' 
-                    : '';
                 
                 return `
                     <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 font-bold text-gray-700">${client ? client.name : 'N/A'}${statusBadge}</td>
-                        <td class="px-6 py-4 font-bold text-green-600">R$ ${credits.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td class="px-6 py-4 font-bold text-gray-700">${client ? client.name : 'N/A'}</td>
                         <td class="px-6 py-4 font-mono">
-                            <span class="bg-gray-100 px-2 py-1 rounded text-gray-600">${Math.floor(c.remaining_seconds/60)}:${(c.remaining_seconds%60).toString().padStart(2,'0')}</span>
+                            <span class="bg-gray-100 px-2 py-1 rounded text-gray-600">${c.minutes}:00</span>
                         </td>
-                        <td class="px-6 py-4 text-xs font-bold uppercase text-gray-400">${typeIcon}</td>
+                        <td class="px-6 py-4 text-[10px] font-bold uppercase text-gray-400">${typeIcon}</td>
                         <td class="px-6 py-4 text-center flex gap-2 justify-center">
                             <button onclick="copyClientLink('${c.id}')" class="bg-gray-100 hover:bg-gray-200 text-indigo-600 p-2 rounded-lg transition" title="Copiar Link do Cliente"><i class="fas fa-link"></i></button>
-                            <button onclick="startConsultation('${c.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition text-sm">
-                                ${c.status === 'active' ? 'Retomar' : 'Iniciar'}
+                            <button onclick="startConsultationDirectly('${c.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition text-xs flex items-center gap-2 shadow-sm">
+                                <i class="fas fa-play"></i> INICIAR
                             </button>
                         </td>
                     </tr>
                 `;
-            }).join('');
+            }).join('') || '<tr><td colspan="4" class="p-8 text-center text-gray-400 italic text-sm">Nenhuma nova consulta no momento.</td></tr>';
+
+            // 2. Renderizar Consultas Ativas (Em Andamento)
+            if (activeConsults.length > 0) {
+                activeSection.classList.remove('hidden');
+                tableActive.innerHTML = activeConsults.map(c => {
+                    const client = store.clients.find(cl => cl.id === c.client_id);
+                    const comissao = (c.minutes || 0) * 0.50; // R$ 0,50 por minuto
+                    const iniciadoEm = new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    
+                    const mins = Math.floor(c.remaining_seconds / 60);
+                    const secs = c.remaining_seconds % 60;
+                    const timerStr = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+
+                    return `
+                        <tr class="hover:bg-blue-50/50">
+                            <td class="px-4 py-3 font-mono text-gray-400">#${c.id.substring(0,6)}</td>
+                            <td class="px-4 py-3 font-black text-gray-800 uppercase">${client ? client.name : 'N/A'}</td>
+                            <td class="px-4 py-3 text-gray-500">HÁ ${iniciadoEm}</td>
+                            <td class="px-4 py-3 font-bold">${c.minutes} MINUTO(S)</td>
+                            <td class="px-4 py-3 text-gray-400">R$ 0,00</td>
+                            <td class="px-4 py-3">
+                                <span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold text-[9px]">PROMOCIONAL</span>
+                            </td>
+                            <td class="px-4 py-3 font-bold text-blue-600">
+                                ${c.minutes}<br>
+                                <span class="font-mono text-gray-400">${timerStr}</span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="bg-blue-600 text-white px-2 py-1 rounded text-center">
+                                    <p class="font-bold">R$ ${comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                    <p class="text-[8px] uppercase opacity-80">Minutos</p>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="flex items-center justify-center gap-2">
+                                    <div class="text-lg font-mono font-black text-gray-800 mr-2">${timerStr}</div>
+                                    <button onclick="pauseConsultationInTable('${c.id}')" class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 shadow-sm transition">
+                                        <i class="fas fa-pause"></i>
+                                    </button>
+                                    <button onclick="finishConsultationInTable('${c.id}')" class="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200 shadow-sm transition">
+                                        <i class="fas fa-stop"></i>
+                                    </button>
+                                    ${c.type === 'chat' ? `
+                                        <button onclick="startConsultation('${c.id}')" class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 shadow-sm transition" title="Abrir Chat">
+                                            <i class="fas fa-comments"></i>
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                // Iniciar cronômetro global se não estiver rodando
+                startGlobalTimer();
+            } else {
+                activeSection.classList.add('hidden');
+                stopGlobalTimer();
+            }
+        }
+
+        // Funções de Controle Direto na Tabela
+        async function startConsultationDirectly(id) {
+            const consult = store.consultations.find(c => c.id === id);
+            if (!consult) return;
+
+            try {
+                // Ativa a consulta no banco
+                await supabaseClient.from('consultas').update({ 
+                    status: 'active',
+                    started_at: new Date().toISOString() 
+                }).eq('id', id);
+                
+                consult.status = 'active';
+                updateUserStatus('busy');
+                
+                // Se for chat, abre a tela de chat. Se for telefone, fica na lista.
+                if (consult.type === 'chat') {
+                    startConsultation(id);
+                } else {
+                    renderView('tarologo-consultas');
+                }
+            } catch (err) {
+                console.error("Erro ao iniciar consulta direta:", err);
+            }
+        }
+
+        function pauseConsultationInTable(id) {
+            // No momento a pausa é apenas visual/local para o tarólogo não se perder, 
+            // mas o tempo no banco continua sincronizado a cada 2s.
+            // Para implementar pausa real, precisaríamos de um status 'paused' no banco.
+            alert("Atendimento pausado localmente.");
+        }
+
+        async function finishConsultationInTable(id) {
+            if(confirm('Tem certeza que deseja encerrar este atendimento agora?')) {
+                const consult = store.consultations.find(c => c.id === id);
+                store.activeConsultation = consult; // Define como ativa para a função finish funcionar
+                await finishConsultation('Atendimento finalizado pelo tarólogo via painel.');
+                renderView('tarologo-consultas');
+            }
+        }
+
+        let globalTimerInterval = null;
+        function startGlobalTimer() {
+            if (globalTimerInterval) return;
+            globalTimerInterval = setInterval(async () => {
+                const activeConsults = store.consultations.filter(c => c.tarologo_id === store.currentUser.id && c.status === 'active');
+                
+                if (activeConsults.length === 0) {
+                    stopGlobalTimer();
+                    return;
+                }
+
+                for (const consult of activeConsults) {
+                    if (consult.remaining_seconds > 0) {
+                        consult.remaining_seconds--;
+                        
+                        // Sincroniza a cada 2 segundos
+                        if (consult.remaining_seconds % 2 === 0) {
+                             await supabaseClient.from('consultas').update({ remaining_seconds: consult.remaining_seconds }).eq('id', consult.id);
+                        }
+                    } else {
+                        store.activeConsultation = consult;
+                        await finishConsultation('Tempo esgotado!');
+                        renderView('tarologo-consultas');
+                    }
+                }
+                
+                // Atualiza a UI se estiver na tela de lista
+                if (store.currentView === 'tarologo-consultas') {
+                    const tableActive = document.getElementById('tarologo-active-consultations-table');
+                    if (tableActive) {
+                        // Só atualiza os elementos de texto do timer para evitar re-renderizar tudo
+                        activeConsults.forEach(c => {
+                            const mins = Math.floor(c.remaining_seconds / 60);
+                            const secs = c.remaining_seconds % 60;
+                            const timerStr = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+                            // Aqui poderíamos buscar elementos específicos, mas por simplicidade re-renderizamos a linha ou a tabela
+                        });
+                        initTarologoConsultas(); // Re-renderiza para manter simples por enquanto
+                    }
+                }
+            }, 1000);
+        }
+
+        function stopGlobalTimer() {
+            if (globalTimerInterval) {
+                clearInterval(globalTimerInterval);
+                globalTimerInterval = null;
+            }
         }
 
         function startConsultation(id) {
@@ -1678,10 +1897,12 @@
             document.getElementById('active-consult-info').textContent = `Tempo total contratado: ${consult.minutes} min`;
             document.getElementById('active-consult-type').textContent = consult.type === 'phone' ? '📞 Telefone' : '💬 Chat';
             
-            // ATIVAÇÃO DA CONSULTA: Quando o tarólogo entra, o status muda para 'active' se estiver 'pending'
+            // MOSTRAR OVERLAY DE INÍCIO SE AINDA NÃO COMEÇOU
+            const overlay = document.getElementById('start-consult-overlay');
             if (consult.status === 'pending') {
-                consult.status = 'active';
-                await supabaseClient.from('consultas').update({ status: 'active' }).eq('id', consult.id);
+                overlay.classList.remove('hidden');
+            } else {
+                overlay.classList.add('hidden');
             }
 
             updateTimerDisplay();
@@ -1730,20 +1951,22 @@
             if (store.timerInterval) clearInterval(store.timerInterval);
             store.timerInterval = setInterval(async () => {
                 // O cronômetro do tarólogo SÓ corre se o status for 'active'
-                if (consult.status === 'active' && consult.remaining_seconds > 0) {
-                    consult.remaining_seconds--;
-                    updateTimerDisplay();
-                    
-                    // Sincroniza com o Banco de Dados a cada 2 segundos para o cliente ver com precisão
-                    if (consult.remaining_seconds % 2 === 0) {
-                         await supabaseClient.from('consultas').update({ remaining_seconds: consult.remaining_seconds }).eq('id', consult.id);
+                if (consult.status === 'active') {
+                    if (consult.remaining_seconds > 0) {
+                        consult.remaining_seconds--;
+                        updateTimerDisplay();
+                        
+                        // Sincroniza com o Banco de Dados a cada 2 segundos para o cliente ver com precisão
+                        if (consult.remaining_seconds % 2 === 0) {
+                             await supabaseClient.from('consultas').update({ remaining_seconds: consult.remaining_seconds }).eq('id', consult.id);
+                        }
+                        
+                        if (consult.remaining_seconds === 60) {
+                            alert('⚠️ AVISO: Falta apenas 1 minuto para encerrar a consulta!');
+                        }
+                    } else {
+                        finishConsultation('Tempo esgotado! A consulta foi encerrada automaticamente.');
                     }
-                    
-                    if (consult.remaining_seconds === 60) {
-                        alert('⚠️ AVISO: Falta apenas 1 minuto para encerrar a consulta!');
-                    }
-                } else if (consult.remaining_seconds <= 0) {
-                    finishConsultation('Tempo esgotado! A consulta foi encerrada automaticamente.');
                 }
             }, 1000);
 
@@ -1780,6 +2003,29 @@
                 clearInterval(store.timerInterval); 
                 alert('Atendimento pausado. O tempo parou de contar.'); 
             };
+        }
+
+        async function activateConsultationManual() {
+            if (!store.activeConsultation) return;
+            const consult = store.activeConsultation;
+            
+            try {
+                // Muda o status local e no banco
+                consult.status = 'active';
+                await supabaseClient.from('consultas').update({ status: 'active' }).eq('id', consult.id);
+                
+                // Muda status do tarólogo para OCUPADO
+                updateUserStatus('busy');
+                
+                // Esconde o overlay
+                const overlay = document.getElementById('start-consult-overlay');
+                if (overlay) overlay.classList.add('hidden');
+                
+                console.log("Consulta iniciada manualmente pelo tarólogo!");
+            } catch (err) {
+                console.error("Erro ao ativar consulta:", err);
+                alert("Erro ao iniciar o atendimento. Tente novamente.");
+            }
         }
 
         async function loadMessages(consultationId) {
@@ -1856,6 +2102,9 @@
                 }).eq('id', consult.id);
 
                 alert(`${msg}\n\nTempo restante (${remainingMinutes} min) devolvido ao cliente.`);
+                
+                // Volta status do tarólogo para ONLINE automaticamente ao finalizar
+                updateUserStatus('online');
             } catch (err) {
                 console.error("Erro ao finalizar consulta:", err);
                 alert("Erro ao salvar finalização da consulta.");
