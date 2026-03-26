@@ -85,6 +85,9 @@
                         <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3" data-view="admin-tarologos">
                             <i class="fas fa-user-tie"></i> Tarólogos
                         </a>
+                        <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3" data-view="admin-history">
+                            <i class="fas fa-history"></i> Histórico
+                        </a>
                     </div>
                     <div id="tarologo-nav" class="hidden">
                         <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3 active" data-view="tarologo-consultas">
@@ -92,6 +95,9 @@
                         </a>
                         <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3" data-view="tarologo-chat">
                             <i class="fas fa-comments"></i> Chat de Atendimento
+                        </a>
+                        <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3" data-view="tarologo-history">
+                            <i class="fas fa-history"></i> Meu Histórico
                         </a>
                     </div>
                     <div class="px-6 py-4 mt-6 border-t border-indigo-800">
@@ -225,6 +231,33 @@
                             </tr>
                         </thead>
                     <tbody id="admin-tarologos-table" class="divide-y">
+                        <!-- Rows injected by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <template id="view-admin-history">
+        <div class="bg-white rounded-lg shadow-sm border border-blue-200">
+            <div class="bg-blue-600 text-white p-4 rounded-t-lg">
+                <h4 class="font-bold text-lg">Histórico de Consultas (Últimos 30 dias)</h4>
+            </div>
+            <div class="p-4 bg-gray-50 border-b">
+                <input type="text" id="history-search" class="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Buscar por nome do cliente ou tarólogo...">
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
+                        <tr>
+                            <th class="px-6 py-4">DATA</th>
+                            <th class="px-6 py-4">CLIENTE</th>
+                            <th class="px-6 py-4">TARÓLOGO</th>
+                            <th class="px-6 py-4">DURAÇÃO</th>
+                            <th class="px-6 py-4 text-center">AÇÕES</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-history-table" class="divide-y">
                         <!-- Rows injected by JS -->
                     </tbody>
                 </table>
@@ -424,6 +457,29 @@
         </div>
     </template>
 
+    <template id="view-tarologo-history">
+        <div class="bg-white rounded-lg shadow-sm border border-blue-200">
+            <div class="bg-blue-600 text-white p-4 rounded-t-lg">
+                <h4 class="font-bold text-lg">Meu Histórico de Consultas</h4>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
+                        <tr>
+                            <th class="px-6 py-4">DATA</th>
+                            <th class="px-6 py-4">CLIENTE</th>
+                            <th class="px-6 py-4">DURAÇÃO</th>
+                            <th class="px-6 py-4 text-center">AÇÕES</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tarologo-history-table" class="divide-y">
+                        <!-- Rows injected by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
     <template id="view-client-chat">
         <div id="client-loading" class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <i class="fas fa-spinner fa-spin text-4xl text-indigo-600 mb-4"></i>
@@ -511,7 +567,7 @@
             try {
                 const { data: clients } = await supabaseClient.from('clients').select('*');
                 const { data: users } = await supabaseClient.from('users').select('*').order('name');
-                const { data: consultations } = await supabaseClient.from('consultations').select('*');
+                const { data: consultations } = await supabaseClient.from('consultas').select('*');
                 
                 store.clients = clients || [];
                 store.users = users || [];
@@ -827,7 +883,7 @@
                 .on('postgres_changes', { 
                     event: 'INSERT', 
                     schema: 'public', 
-                    table: 'consultations',
+                    table: 'consultas',
                     filter: `tarologo_id=eq.${store.currentUser.id}`
                 }, async (payload) => {
                     console.log("NOVA CONSULTA RECEBIDA EM TEMPO REAL:", payload);
@@ -890,8 +946,10 @@
                 'admin-dashboard': 'Resumo do Sistema',
                 'admin-clients': 'Gerenciar Clientes',
                 'admin-tarologos': 'Gerenciar Tarólogos',
+                'admin-history': 'Histórico de Consultas',
                 'tarologo-consultas': 'Minha Lista de Consultas',
                 'tarologo-chat': 'Sala de Atendimento',
+                'tarologo-history': 'Meu Histórico',
                 'client-chat': 'Seu Atendimento'
             };
             viewTitle.textContent = titles[viewId] || 'Dashboard';
@@ -899,9 +957,145 @@
             if (viewId === 'admin-dashboard') initAdminDashboard();
             if (viewId === 'admin-clients') initAdminClients();
             if (viewId === 'admin-tarologos') initAdminTarologos();
+            if (viewId === 'admin-history') initAdminHistory();
             if (viewId === 'tarologo-consultas') initTarologoConsultas();
             if (viewId === 'tarologo-chat') initTarologoChat();
+            if (viewId === 'tarologo-history') initTarologoHistory();
             if (viewId === 'client-chat') initClientChat();
+        }
+
+        async function initAdminHistory() {
+            const tableBody = document.getElementById('admin-history-table');
+            tableBody.innerHTML = '<tr><td colspan="5" class="text-center p-8"><i class="fas fa-spinner fa-spin text-2xl text-indigo-600"></i></td></tr>';
+
+            const { data: consultations, error } = await supabaseClient
+                .from('consultas')
+                .select(`
+                    id, created_at, ended_at, client_name,
+                    users ( name )
+                `)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Erro ao buscar histórico:', error);
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center p-8 text-red-500">Erro ao carregar o histórico.</td></tr>';
+                return;
+            }
+
+            renderHistoryTable(consultations);
+
+            const searchInput = document.getElementById('history-search');
+            searchInput.addEventListener('keyup', () => {
+                const searchTerm = searchInput.value.toLowerCase();
+                const filteredConsultas = consultations.filter(c => 
+                    (c.client_name && c.client_name.toLowerCase().includes(searchTerm)) || 
+                    (c.users && c.users.name.toLowerCase().includes(searchTerm))
+                );
+                renderHistoryTable(filteredConsultas);
+            });
+        }
+
+        function renderHistoryTable(consultations) {
+            const tableBody = document.getElementById('admin-history-table');
+            if (!consultations || consultations.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center p-8 text-gray-500">Nenhum registro de consulta encontrado.</td></tr>';
+                return;
+            }
+
+            tableBody.innerHTML = consultations.map(c => {
+                const startDate = new Date(c.created_at);
+                const endDate = c.ended_at ? new Date(c.ended_at) : null;
+                const duration = endDate ? Math.round((endDate - startDate) / (1000 * 60)) : 'Em andamento';
+
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${startDate.toLocaleString('pt-BR')}</td>
+                        <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-800">${c.client_name || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${c.users ? c.users.name : 'Não encontrado'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${duration} min</td>
+                        <td class="px-6 py-4 text-center">
+                            <button onclick="viewChatLog('${c.id}')" class="text-indigo-600 hover:text-indigo-900 text-sm font-medium">Ver Chat</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function viewChatLog(consultaId) {
+            openModal('<i class="fas fa-spinner fa-spin"></i> Carregando...');
+            const { data: consulta, error } = await supabaseClient
+                .from('consultas')
+                .select('chat_log')
+                .eq('id', consultaId)
+                .single();
+
+            if (error || !consulta) {
+                document.getElementById('modal-body').innerHTML = '<p class="text-red-500">Erro ao carregar o chat.</p>';
+                return;
+            }
+
+            let chatHTML = '<div class="space-y-4">';
+            if (consulta.chat_log && consulta.chat_log.length > 0) {
+                consulta.chat_log.forEach(msg => {
+                    const msgDate = new Date(msg.created_at);
+                    const formattedTime = `${msgDate.getHours().toString().padStart(2, '0')}:${msgDate.getMinutes().toString().padStart(2, '0')}`;
+                    const isTarologo = msg.sender_id === 'tarologo'; // Assumindo que o log salva quem enviou
+                    
+                    chatHTML += `
+                        <div class="p-3 rounded-lg ${isTarologo ? 'bg-indigo-50' : 'bg-gray-100'}">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-bold text-sm ${isTarologo ? 'text-indigo-700' : 'text-gray-700'}">${msg.sender_name}</span>
+                                <span class="text-xs text-gray-400">${formattedTime}</span>
+                            </div>
+                            <p class="text-gray-800">${msg.text}</p>
+                        </div>
+                    `;
+                });
+            } else {
+                chatHTML += '<p>Nenhuma mensagem registrada para esta consulta.</p>';
+            }
+            chatHTML += '</div>';
+
+            document.getElementById('modal-body').innerHTML = chatHTML;
+        }
+
+        async function initTarologoHistory() {
+            const tableBody = document.getElementById('tarologo-history-table');
+            tableBody.innerHTML = '<tr><td colspan="4" class="text-center p-8"><i class="fas fa-spinner fa-spin text-2xl text-indigo-600"></i></td></tr>';
+
+            const { data: consultations, error } = await supabaseClient
+                .from('consultas')
+                .select(`id, created_at, ended_at, client_name`)
+                .eq('tarologo_id', store.currentUser.id)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Erro ao buscar meu histórico:', error);
+                tableBody.innerHTML = '<tr><td colspan="4" class="text-center p-8 text-red-500">Erro ao carregar seu histórico.</td></tr>';
+                return;
+            }
+
+            if (consultations.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="4" class="text-center p-8 text-gray-500">Você ainda não possui atendimentos finalizados.</td></tr>';
+                return;
+            }
+
+            tableBody.innerHTML = consultations.map(c => {
+                const startDate = new Date(c.created_at);
+                const endDate = c.ended_at ? new Date(c.ended_at) : null;
+                const duration = endDate ? Math.round((endDate - startDate) / (1000 * 60)) : 'Em andamento';
+
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${startDate.toLocaleString('pt-BR')}</td>
+                        <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-800">${c.client_name || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${duration} min</td>
+                        <td class="px-6 py-4 text-center">
+                            <button onclick="viewChatLog('${c.id}')" class="text-indigo-600 hover:text-indigo-900 text-sm font-medium">Ver Chat</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         async function initClientChat() {
@@ -916,7 +1110,7 @@
 
             // Load consultation data
             const { data: consult, error } = await supabaseClient
-                .from('consultations')
+                .from('consultas')
                 .select('*, clients(*), users(*)')
                 .eq('id', consultId)
                 .single();
@@ -957,7 +1151,7 @@
             // Real-time Update for Timer and Status
             const clientConsultSub = supabaseClient
                 .channel(`status_monitor_${consultId}`)
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'consultations', filter: `id=eq.${consultId}` }, payload => {
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'consultas', filter: `id=eq.${consultId}` }, payload => {
                     console.log("SYNC DO BANCO (CLIENTE):", payload.new);
                     
                     const oldStatus = consult.status;
@@ -1064,7 +1258,7 @@
                                 await supabaseClient.from('clients').update({ balance: cData.balance + remainingMinutes }).eq('id', consult.client_id);
                             }
                         }
-                        await supabaseClient.from('consultations').update({ 
+                        await supabaseClient.from('consultas').update({ 
                             status: 'finished', 
                             remaining_seconds: 0,
                             minutes: usedMinutes > 0 ? usedMinutes : 0
@@ -1147,7 +1341,9 @@
             document.getElementById('stat-online-tarologos').textContent = store.users.filter(u => u.role === 'tarologo' && u.status === 'online').length;
 
             const table = document.getElementById('admin-consultations-table');
-            table.innerHTML = store.consultations.map(c => {
+            const ongoingConsultations = store.consultations.filter(c => c.status !== 'finished');
+
+            table.innerHTML = ongoingConsultations.map(c => {
                 const client = store.clients.find(cl => cl.id === c.client_id);
                 const tarologo = store.users.find(u => u.id === c.tarologo_id);
                 return `
@@ -1158,7 +1354,7 @@
                         <td class="px-6 py-4 font-medium text-purple-700">${tarologo ? tarologo.name : 'Não atribuído'}</td>
                         <td class="px-6 py-4">
                             <span class="px-2 py-1 rounded-full text-xs font-bold ${c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}">
-                                ${c.status === 'pending' ? 'Aguardando' : 'Finalizada'}
+                                ${c.status === 'pending' ? 'Aguardando' : (c.status === 'active' ? 'Em Andamento' : 'Finalizada')}
                             </span>
                         </td>
                         <td class="px-6 py-4">
@@ -1306,13 +1502,14 @@
                 const mins = parseInt(document.getElementById('consult-minutes').value);
                 const type = document.getElementById('consult-type').value;
                 const client = store.clients.find(c => c.id === cid);
-                await supabaseClient.from('consultations').insert([{ 
+                await supabaseClient.from('consultas').insert([{ 
                     client_id: cid, 
                     tarologo_id: tid, 
                     minutes: mins, 
                     remaining_seconds: mins * 60, 
                     status: 'pending',
-                    type: type 
+                    type: type,
+                    client_name: client.name // Adicionado para o histórico
                 }]);
                 await supabaseClient.from('clients').update({ balance: client.balance - mins }).eq('id', cid);
                 closeModal();
@@ -1366,7 +1563,7 @@
 
         async function deleteClient(id) { if(confirm('Excluir cliente?')) { await supabaseClient.from('clients').delete().eq('id', id); showDashboard(); } }
         async function deleteTarologo(id) { if(confirm('Excluir tarólogo?')) { await supabaseClient.from('users').delete().eq('id', id); showDashboard(); } }
-        async function deleteConsultation(id) { if(confirm('Remover consulta?')) { await supabaseClient.from('consultations').delete().eq('id', id); showDashboard(); } }
+        async function deleteConsultation(id) { if(confirm('Remover consulta?')) { await supabaseClient.from('consultas').delete().eq('id', id); showDashboard(); } }
 
         function copyClientLink(consultationId) {
             const url = `${window.location.origin}${window.location.pathname}?c=${consultationId}`;
@@ -1441,6 +1638,7 @@
 
             const consult = store.activeConsultation;
             const client = store.clients.find(cl => cl.id === consult.client_id);
+            consult.chat_log = consult.chat_log || []; // Garante que o log de chat exista
             
             document.getElementById('no-active-consult').classList.add('hidden');
             document.getElementById('active-consultation-section').classList.remove('hidden');
@@ -1452,35 +1650,41 @@
             // ATIVAÇÃO DA CONSULTA: Quando o tarólogo entra, o status muda para 'active' se estiver 'pending'
             if (consult.status === 'pending') {
                 consult.status = 'active';
-                await supabaseClient.from('consultations').update({ status: 'active' }).eq('id', consult.id);
+                await supabaseClient.from('consultas').update({ status: 'active' }).eq('id', consult.id);
             }
 
             updateTimerDisplay();
             loadMessages(consult.id);
             
-            // 1. Real-time Chat
             const messageSubscription = supabaseClient
                 .channel(`chat_messages_${consult.id}`)
                 .on('postgres_changes', { 
-                    event: 'INSERT', 
+                    event: 'UPDATE', 
                     schema: 'public', 
-                    table: 'messages', 
-                    filter: `consultation_id=eq.${consult.id}` 
+                    table: 'consultas', 
+                    filter: `id=eq.${consult.id}` 
                 }, payload => {
-                    console.log("NOVA MENSAGEM (TARÓLOGO):", payload.new);
-                    addMessageToUI(payload.new);
+                    const newLog = payload.new.chat_log;
+                    const oldLog = consult.chat_log || [];
+                    if (newLog.length > oldLog.length) {
+                        const newMessage = newLog[newLog.length - 1];
+                        // Evita mostrar a própria mensagem duas vezes
+                        if (newMessage.sender_id !== store.currentUser.id) {
+                            addMessageToUI(newMessage);
+                            consult.chat_log = newLog;
+                        }
+                    }
                 })
                 .subscribe((status) => {
                     console.log("Realtime Chat Status (Tarólogo):", status);
                 });
 
-            // 2. Real-time Status Monitor (if client finishes)
             const statusSubscription = supabaseClient
                 .channel(`status_monitor_${consult.id}`)
                 .on('postgres_changes', { 
                     event: 'UPDATE', 
                     schema: 'public', 
-                    table: 'consultations', 
+                    table: 'consultas', 
                     filter: `id=eq.${consult.id}` 
                 }, payload => {
                     console.log("CONSULTA ATUALIZADA (STATUS):", payload.new.status);
@@ -1501,7 +1705,7 @@
                     
                     // Sincroniza com o Banco de Dados a cada 2 segundos para o cliente ver com precisão
                     if (consult.remaining_seconds % 2 === 0) {
-                         await supabaseClient.from('consultations').update({ remaining_seconds: consult.remaining_seconds }).eq('id', consult.id);
+                         await supabaseClient.from('consultas').update({ remaining_seconds: consult.remaining_seconds }).eq('id', consult.id);
                     }
                     
                     if (consult.remaining_seconds === 60) {
@@ -1517,14 +1721,20 @@
                 const input = document.getElementById('chat-input');
                 const text = input.value.trim();
                 if (!text) return;
-                
-                input.value = '';
-                await supabaseClient.from('messages').insert([{
-                    consultation_id: consult.id,
+
+                const message = {
                     sender_id: store.currentUser.id,
                     sender_name: store.currentUser.name,
-                    text: text
-                }]);
+                    text: text,
+                    created_at: new Date().toISOString()
+                };
+
+                // Adiciona a mensagem ao log local e envia para o Supabase
+                consult.chat_log.push(message);
+                addMessageToUI(message);
+                
+                input.value = '';
+                await supabaseClient.from('consultations').update({ chat_log: consult.chat_log }).eq('id', consult.id);
             };
 
             document.getElementById('finish-consult-btn').onclick = () => {
@@ -1543,19 +1753,9 @@
 
         async function loadMessages(consultationId) {
             const chatBox = document.getElementById('chat-messages');
-            chatBox.innerHTML = '<div class="text-center text-xs text-gray-400 italic my-4">Carregando histórico...</div>';
-            
-            const { data: messages, error } = await supabaseClient
-                .from('messages')
-                .select('*')
-                .eq('consultation_id', consultationId)
-                .order('created_at', { ascending: true });
-                
-            if (error) {
-                chatBox.innerHTML = '<div class="text-center text-red-400 text-xs">Erro ao carregar mensagens.</div>';
-                return;
-            }
-            
+            const consult = store.consultations.find(c => c.id === consultationId);
+            const messages = consult ? (consult.chat_log || []) : [];
+
             chatBox.innerHTML = messages.length ? '' : '<div class="text-center text-xs text-gray-400 italic my-4">Nenhuma mensagem ainda.</div>';
             messages.forEach(msg => addMessageToUI(msg));
         }
@@ -1620,7 +1820,8 @@
                 await supabaseClient.from('consultations').update({ 
                     status: 'finished', 
                     remaining_seconds: 0,
-                    minutes: finalUsedMinutes // Atualiza para o tempo real usado
+                    minutes: finalUsedMinutes, // Atualiza para o tempo real usado
+                    ended_at: new Date().toISOString()
                 }).eq('id', consult.id);
 
                 alert(`${msg}\n\nTempo restante (${remainingMinutes} min) devolvido ao cliente.`);
