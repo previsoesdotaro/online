@@ -10,6 +10,12 @@
     <style>
         .sidebar { transition: all 0.3s; }
         .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
+        @keyframes pulse-status {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .status-pulse { animation: pulse-status 2s infinite ease-in-out; }
     </style>
 </head>
 <body class="bg-gray-100 font-sans text-gray-800">
@@ -42,13 +48,39 @@
             <!-- Sidebar -->
             <div class="sidebar w-64 bg-indigo-900 text-white flex-shrink-0">
                 <div class="p-6 text-center border-b border-indigo-800">
-                    <h2 class="text-2xl font-bold">Tarot Panel</h2>
+                    <h2 class="text-2xl font-bold">Painel de Tarot</h2>
                     <p id="user-role-display" class="text-xs text-indigo-300 mt-1 uppercase tracking-wider font-semibold"></p>
+                    
+                    <!-- Tarólogo Status Selector -->
+                    <div id="status-selector-container" class="mt-4 hidden">
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="flex items-center gap-2 px-3 py-1.5 bg-indigo-950 rounded-full border border-indigo-700 w-full justify-between group cursor-pointer relative" onclick="toggleStatusDropdown()">
+                                <div class="flex items-center gap-2">
+                                     <span id="user-status-indicator" class="w-3 h-3 rounded-full bg-gray-500"></span>
+                                     <span id="user-status-text" class="text-[10px] font-bold uppercase">Offline</span>
+                                 </div>
+                                <i class="fas fa-chevron-down text-[10px] text-indigo-400 group-hover:text-white transition"></i>
+                                
+                                <!-- Dropdown -->
+                                <div id="status-dropdown" class="absolute top-full left-0 right-0 mt-1 bg-indigo-900 border border-indigo-700 rounded-lg shadow-xl hidden z-50 overflow-hidden">
+                                    <button onclick="updateUserStatus('online')" class="w-full px-4 py-2 text-left text-[10px] font-bold uppercase hover:bg-indigo-800 flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-green-500"></span> Online
+                                    </button>
+                                    <button onclick="updateUserStatus('busy')" class="w-full px-4 py-2 text-left text-[10px] font-bold uppercase hover:bg-indigo-800 flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-red-500"></span> Ocupado
+                                    </button>
+                                    <button onclick="updateUserStatus('away')" class="w-full px-4 py-2 text-left text-[10px] font-bold uppercase hover:bg-indigo-800 flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-yellow-500"></span> Ausente
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <nav class="mt-6">
                     <div id="admin-nav" class="hidden">
                         <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3 active" data-view="admin-dashboard">
-                            <i class="fas fa-chart-line"></i> Dashboard
+                            <i class="fas fa-chart-line"></i> Painel Principal
                         </a>
                         <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3" data-view="admin-clients">
                             <i class="fas fa-users"></i> Clientes
@@ -188,13 +220,13 @@
             <div class="overflow-x-auto">
                 <table class="w-full text-left">
                     <thead class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
-                        <tr>
-                            <th class="px-6 py-4">NOME</th>
-                            <th class="px-6 py-4">USUÁRIO</th>
-                            <th class="px-6 py-4">PAPEL</th>
-                            <th class="px-6 py-4">AÇÕES</th>
-                        </tr>
-                    </thead>
+                            <tr>
+                                <th class="px-6 py-4">NOME</th>
+                                <th class="px-6 py-4">USUÁRIO</th>
+                                <th class="px-6 py-4">STATUS</th>
+                                <th class="px-6 py-4">AÇÕES</th>
+                            </tr>
+                        </thead>
                     <tbody id="admin-tarologos-table" class="divide-y">
                         <!-- Rows injected by JS -->
                     </tbody>
@@ -456,7 +488,7 @@
         async function loadInitialData() {
             try {
                 const { data: clients } = await supabaseClient.from('clients').select('*');
-                const { data: users } = await supabaseClient.from('users').select('*');
+                const { data: users } = await supabaseClient.from('users').select('*').order('name');
                 const { data: consultations } = await supabaseClient.from('consultations').select('*');
                 
                 store.clients = clients || [];
@@ -468,6 +500,53 @@
                 console.error("Erro ao carregar dados:", err);
             }
         }
+
+        async function updateUserStatus(status) {
+            if (!store.currentUser || store.currentUser.role !== 'tarologo') return;
+            try {
+                await supabaseClient
+                    .from('users')
+                    .update({ status: status })
+                    .eq('id', store.currentUser.id);
+                
+                // Update local store as well
+                const userIdx = store.users.findIndex(u => u.id === store.currentUser.id);
+                if (userIdx !== -1) store.users[userIdx].status = status;
+                
+                // If we're in the tarologo view, we might want to update the UI indicator (added later)
+                const statusIndicator = document.getElementById('user-status-indicator');
+                if (statusIndicator) {
+                    const colors = {
+                        'online': 'bg-green-500',
+                        'busy': 'bg-red-500',
+                        'away': 'bg-yellow-500',
+                        'offline': 'bg-gray-500'
+                    };
+                    const labels = {
+                        'online': 'Online',
+                        'busy': 'Ocupado',
+                        'away': 'Ausente',
+                        'offline': 'Offline'
+                    };
+                    statusIndicator.className = `w-3 h-3 rounded-full ${colors[status] || 'bg-gray-500'}`;
+                    if (status === 'online') statusIndicator.classList.add('status-pulse');
+                    else statusIndicator.classList.remove('status-pulse');
+                    const statusText = document.getElementById('user-status-text');
+                    if (statusText) statusText.textContent = labels[status] || 'Offline';
+                }
+            } catch (err) {
+                console.error("Erro ao atualizar status:", err);
+            }
+        }
+
+        // Handle window closing to set offline
+        window.addEventListener('beforeunload', () => {
+            if (store.currentUser && store.currentUser.role === 'tarologo') {
+                // Use navigator.sendBeacon or a synchronous-like update if possible, 
+                // but Supabase is async. Best effort here.
+                updateUserStatus('offline');
+            }
+        });
 
         function updateEarningsDisplay() {
             if (!store.currentUser || store.currentUser.role !== 'tarologo') return;
@@ -551,6 +630,12 @@
                 if (user) {
                     store.currentUser = user;
                     localStorage.setItem('tarot_user', JSON.stringify(user));
+                    
+                    // Set status to online if reader
+                    if (user.role === 'tarologo') {
+                        await updateUserStatus('online');
+                    }
+                    
                     showDashboard();
                 }
             } catch (err) {
@@ -561,7 +646,10 @@
             }
         });
 
-        document.getElementById('logout-btn').addEventListener('click', () => {
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            if (store.currentUser && store.currentUser.role === 'tarologo') {
+                await updateUserStatus('offline');
+            }
             store.currentUser = null;
             localStorage.removeItem('tarot_user');
             if (store.timerInterval) clearInterval(store.timerInterval);
@@ -574,7 +662,13 @@
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('main-dashboard').classList.remove('hidden');
             document.getElementById('current-user-name').textContent = store.currentUser.name;
-            document.getElementById('user-role-display').textContent = store.currentUser.role;
+            
+            // Map role to Portuguese
+            const roleMap = {
+                'admin': 'Administrador',
+                'tarologo': 'Tarólogo'
+            };
+            document.getElementById('user-role-display').textContent = roleMap[store.currentUser.role] || store.currentUser.role;
 
             // Start Realtime Notification Monitor
             startNotificationMonitor();
@@ -582,11 +676,34 @@
             if (store.currentUser.role === 'admin') {
                 document.getElementById('admin-nav').classList.remove('hidden');
                 document.getElementById('tarologo-nav').classList.add('hidden');
+                document.getElementById('status-selector-container').classList.add('hidden');
                 renderView('admin-dashboard');
             } else {
                 document.getElementById('admin-nav').classList.add('hidden');
                 document.getElementById('tarologo-nav').classList.remove('hidden');
+                document.getElementById('status-selector-container').classList.remove('hidden');
+                
+                // Set initial UI status from store
+                const myStatus = store.currentUser.status || 'online';
+                updateUserStatus(myStatus);
+                
                 renderView('tarologo-consultas');
+            }
+        }
+
+        function toggleStatusDropdown() {
+            const dropdown = document.getElementById('status-dropdown');
+            dropdown.classList.toggle('hidden');
+            
+            // Close dropdown when clicking outside
+            const closeDropdown = (e) => {
+                if (!e.target.closest('#status-selector-container')) {
+                    dropdown.classList.add('hidden');
+                    document.removeEventListener('click', closeDropdown);
+                }
+            };
+            if (!dropdown.classList.contains('hidden')) {
+                setTimeout(() => document.addEventListener('click', closeDropdown), 10);
             }
         }
 
@@ -919,7 +1036,7 @@
         function initAdminDashboard() {
             document.getElementById('stat-total-clients').textContent = store.clients.length;
             document.getElementById('stat-today-consults').textContent = store.consultations.length;
-            document.getElementById('stat-online-tarologos').textContent = store.users.filter(u => u.role === 'tarologo').length;
+            document.getElementById('stat-online-tarologos').textContent = store.users.filter(u => u.role === 'tarologo' && u.status === 'online').length;
 
             const table = document.getElementById('admin-consultations-table');
             table.innerHTML = store.consultations.map(c => {
@@ -966,18 +1083,69 @@
 
         function initAdminTarologos() {
             const table = document.getElementById('admin-tarologos-table');
-            table.innerHTML = store.users.filter(u => u.role === 'tarologo').map(u => `
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 font-medium">${u.name}</td>
-                    <td class="px-6 py-4 text-sm">${u.username}</td>
-                    <td class="px-6 py-4">
-                        <span class="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-bold uppercase">Tarólogo</span>
-                    </td>
-                    <td class="px-6 py-4">
-                        <button onclick="deleteTarologo('${u.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
-                    </td>
-                </tr>
-            `).join('');
+            
+            const renderTarologos = () => {
+                table.innerHTML = store.users.filter(u => u.role === 'tarologo').map(u => {
+                    const status = u.status || 'offline';
+                    const colors = {
+                        'online': 'bg-green-100 text-green-700',
+                        'busy': 'bg-red-100 text-red-700',
+                        'away': 'bg-yellow-100 text-yellow-700',
+                        'offline': 'bg-gray-100 text-gray-500'
+                    };
+                    const labels = {
+                        'online': 'Online',
+                        'busy': 'Ocupado',
+                        'away': 'Ausente',
+                        'offline': 'Offline'
+                    };
+                    
+                    return `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 font-medium">${u.name}</td>
+                            <td class="px-6 py-4 text-sm">${u.username}</td>
+                            <td class="px-6 py-4">
+                                <span class="${colors[status]} px-2 py-1 rounded text-[10px] font-bold uppercase flex items-center gap-1.5 w-fit">
+                                    <span class="w-2 h-2 rounded-full ${status === 'online' ? 'bg-green-500' : status === 'busy' ? 'bg-red-500' : status === 'away' ? 'bg-yellow-500' : 'bg-gray-400'}"></span>
+                                    ${labels[status]}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <button onclick="deleteTarologo('${u.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            };
+
+            renderTarologos();
+
+            // Real-time status monitor for Admin
+            if (store.statusSubscription) supabaseClient.removeChannel(store.statusSubscription);
+            
+            store.statusSubscription = supabaseClient
+                .channel('admin_status_monitor')
+                .on('postgres_changes', { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'users'
+                }, payload => {
+                    console.log("STATUS UPDATE RECEIVED:", payload.new);
+                    const userIdx = store.users.findIndex(u => u.id === payload.new.id);
+                    if (userIdx !== -1) {
+                        store.users[userIdx] = payload.new;
+                        if (store.currentView === 'admin-tarologos') {
+                            renderTarologos();
+                        }
+                        // Also update dashboard counts if visible
+                        if (store.currentView === 'admin-dashboard') {
+                            const activeCount = store.users.filter(u => u.role === 'tarologo' && u.status === 'online').length;
+                            const statEl = document.getElementById('stat-online-tarologos');
+                            if (statEl) statEl.textContent = activeCount;
+                        }
+                    }
+                })
+                .subscribe();
         }
 
         // Modals
