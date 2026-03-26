@@ -751,7 +751,17 @@
 
             // Metas Dinâmicas (Vem do Banco de Dados)
             const META_MEN_VALOR = parseFloat(store.currentUser.monthly_goal || 0);
-            const META_DIA_VALOR = parseFloat(store.currentUser.daily_goal || 0);
+            
+            // CÁLCULO AUTOMÁTICO DA META DE HOJE (Baseado no mensal e dias restantes)
+            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const daysRemaining = lastDayOfMonth - now.getDate() + 1; // Incluindo hoje
+            
+            // Ganhos do mês até ontem (para saber quanto falta para os dias que restam)
+            const earningsUntilYesterday = mensalEarnings - dailyEarnings;
+            
+            // Meta Diária necessária para atingir o mensal até o fim do mês
+            // Fórmula: (Meta Mensal - Ganhos acumulados até ontem) / Dias que restam no mês
+            const META_DIA_VALOR = Math.max(0, (META_MEN_VALOR - earningsUntilYesterday) / daysRemaining);
 
             // Atualiza Sidebar
             const display = document.getElementById('sidebar-earnings');
@@ -1543,8 +1553,8 @@
                             </span>
                         </td>
                         <td class="px-6 py-4 text-xs">
-                            <div class="text-gray-500 italic">Mês: R$ ${(u.monthly_goal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                            <div class="text-gray-500 italic">Dia: R$ ${(u.daily_goal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                            <div class="text-gray-900 font-bold">Meta: R$ ${(u.monthly_goal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                            <div class="text-gray-400 italic">Diário calculado automaticamente</div>
                         </td>
                         <td class="px-6 py-4 flex gap-3">
                             <button onclick="openEditGoalsModal('${u.id}')" class="text-blue-600 hover:text-blue-800" title="Editar Metas"><i class="fas fa-bullseye"></i></button>
@@ -1563,13 +1573,10 @@
                 <form id="edit-goals-form" class="space-y-4">
                     <div>
                         <label class="block text-sm font-medium mb-1">Meta Mensal (R$)</label>
-                        <input type="number" step="0.01" id="goal-monthly" class="w-full border p-2 rounded" value="${user.monthly_goal || 0}" required>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-1">Meta Diária (R$)</label>
-                        <input type="number" step="0.01" id="goal-daily" class="w-full border p-2 rounded" value="${user.daily_goal || 0}" required>
-                    </div>
-                    <div class="flex gap-2 pt-4">
+                         <input type="number" step="0.01" id="goal-monthly" class="w-full border p-2 rounded" value="${user.monthly_goal || 0}" required>
+                         <p class="text-[10px] text-gray-400 mt-1 italic">* A Meta Diária será calculada automaticamente dividindo o valor restante do mês pelos dias que faltam.</p>
+                     </div>
+                     <div class="flex gap-2 pt-4">
                         <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 py-2 rounded font-bold">Cancelar</button>
                         <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded font-bold">Salvar Metas</button>
                     </div>
@@ -1577,18 +1584,16 @@
             `);
 
             document.getElementById('edit-goals-form').onsubmit = async (e) => {
-                e.preventDefault();
-                const monthly = parseFloat(document.getElementById('goal-monthly').value);
-                const daily = parseFloat(document.getElementById('goal-daily').value);
+                 e.preventDefault();
+                 const monthly = parseFloat(document.getElementById('goal-monthly').value);
 
-                try {
-                    const { error } = await supabaseClient
-                        .from('users')
-                        .update({ 
-                            monthly_goal: monthly, 
-                            daily_goal: daily 
-                        })
-                        .eq('id', tarologoId);
+                 try {
+                     const { error } = await supabaseClient
+                         .from('users')
+                         .update({ 
+                             monthly_goal: monthly
+                         })
+                         .eq('id', tarologoId);
 
                     if (error) throw error;
                     
