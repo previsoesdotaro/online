@@ -69,9 +69,6 @@
                                     <button onclick="updateUserStatus('busy')" class="w-full px-4 py-2 text-left text-[10px] font-bold uppercase hover:bg-indigo-800 flex items-center gap-2">
                                         <span class="w-2 h-2 rounded-full bg-red-500"></span> Ocupado
                                     </button>
-                                    <button onclick="updateUserStatus('away')" class="w-full px-4 py-2 text-left text-[10px] font-bold uppercase hover:bg-indigo-800 flex items-center gap-2">
-                                        <span class="w-2 h-2 rounded-full bg-yellow-500"></span> Ausente
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -258,9 +255,6 @@
                     </button>
                     <button onclick="updateUserStatus('busy')" data-status="busy" class="flex items-center gap-2 px-6 py-3 rounded-lg border border-red-200 hover:bg-red-50 transition-all font-bold text-red-700 text-sm">
                         <span class="w-2 h-2 rounded-full bg-red-500"></span> Ocupado
-                    </button>
-                    <button onclick="updateUserStatus('away')" data-status="away" class="flex items-center gap-2 px-6 py-3 rounded-lg border border-yellow-200 hover:bg-yellow-50 transition-all font-bold text-yellow-700 text-sm">
-                        <span class="w-2 h-2 rounded-full bg-yellow-500"></span> Ausente
                     </button>
                 </div>
             </div>
@@ -533,6 +527,11 @@
                 }
 
                 updateEarningsDisplay();
+                
+                // Se o administrador estiver na aba de tarólogos, atualiza a tabela
+                if (store.currentUser && store.currentUser.role === 'admin' && store.currentView === 'admin-tarologos') {
+                    renderAdminTarologosTable();
+                }
             } catch (err) {
                 console.error("Erro ao carregar dados:", err);
             }
@@ -540,13 +539,19 @@
 
         async function updateUserStatus(status) {
             if (!store.currentUser || store.currentUser.role !== 'tarologo') return;
+            console.log(`Tentando atualizar status para: ${status}`);
             try {
                 const { error } = await supabaseClient
                     .from('users')
                     .update({ status: status })
                     .eq('id', store.currentUser.id);
                 
-                if (error) throw error;
+                if (error) {
+                    console.error("Erro Supabase ao atualizar status:", error);
+                    throw error;
+                }
+
+                console.log("Status atualizado no banco com sucesso!");
 
                 // Update local store
                 store.currentUser.status = status;
@@ -567,13 +572,11 @@
             const colors = {
                 'online': 'bg-green-500',
                 'busy': 'bg-red-500',
-                'away': 'bg-yellow-500',
                 'offline': 'bg-gray-500'
             };
             const labels = {
                 'online': 'Online',
                 'busy': 'Ocupado',
-                'away': 'Ausente',
                 'offline': 'Offline'
             };
 
@@ -1199,13 +1202,11 @@
                 const colors = {
                     'online': 'bg-green-100 text-green-700',
                     'busy': 'bg-red-100 text-red-700',
-                    'away': 'bg-yellow-100 text-yellow-700',
                     'offline': 'bg-gray-100 text-gray-500'
                 };
                 const labels = {
                     'online': 'Online',
                     'busy': 'Ocupado',
-                    'away': 'Ausente',
                     'offline': 'Offline'
                 };
                 
