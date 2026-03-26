@@ -237,6 +237,34 @@
 
     <template id="view-tarologo-consultas">
         <div class="space-y-6">
+            <!-- Novo Card de Status (Destaque) -->
+            <div class="bg-white rounded-xl shadow-sm border border-indigo-100 p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600">
+                        <i class="fas fa-user-circle text-3xl"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-lg font-bold text-gray-800">Seu Status de Atendimento</h4>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span id="card-status-indicator" class="w-4 h-4 rounded-full bg-gray-500"></span>
+                            <span id="card-status-text" class="text-sm font-bold text-gray-600 uppercase">Offline</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="card-status-btns" class="flex flex-wrap gap-3">
+                    <button onclick="updateUserStatus('online')" data-status="online" class="flex items-center gap-2 px-6 py-3 rounded-lg border border-green-200 hover:bg-green-50 transition-all font-bold text-green-700 text-sm">
+                        <span class="w-2 h-2 rounded-full bg-green-500"></span> Online
+                    </button>
+                    <button onclick="updateUserStatus('busy')" data-status="busy" class="flex items-center gap-2 px-6 py-3 rounded-lg border border-red-200 hover:bg-red-50 transition-all font-bold text-red-700 text-sm">
+                        <span class="w-2 h-2 rounded-full bg-red-500"></span> Ocupado
+                    </button>
+                    <button onclick="updateUserStatus('away')" data-status="away" class="flex items-center gap-2 px-6 py-3 rounded-lg border border-yellow-200 hover:bg-yellow-50 transition-all font-bold text-yellow-700 text-sm">
+                        <span class="w-2 h-2 rounded-full bg-yellow-500"></span> Ausente
+                    </button>
+                </div>
+            </div>
+
             <!-- Consultas em Aberto -->
             <div class="bg-white rounded-lg shadow-sm border border-blue-200">
                 <div class="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
@@ -495,6 +523,15 @@
                 store.users = users || [];
                 store.consultations = consultations || [];
                 
+                // Refresh currentUser status from DB
+                if (store.currentUser) {
+                    const dbUser = store.users.find(u => u.id === store.currentUser.id);
+                    if (dbUser) {
+                        store.currentUser.status = dbUser.status || 'offline';
+                        localStorage.setItem('tarot_user', JSON.stringify(store.currentUser));
+                    }
+                }
+
                 updateEarningsDisplay();
             } catch (err) {
                 console.error("Erro ao carregar dados:", err);
@@ -504,38 +541,74 @@
         async function updateUserStatus(status) {
             if (!store.currentUser || store.currentUser.role !== 'tarologo') return;
             try {
-                await supabaseClient
+                const { error } = await supabaseClient
                     .from('users')
                     .update({ status: status })
                     .eq('id', store.currentUser.id);
                 
-                // Update local store as well
+                if (error) throw error;
+
+                // Update local store
+                store.currentUser.status = status;
+                localStorage.setItem('tarot_user', JSON.stringify(store.currentUser));
+
                 const userIdx = store.users.findIndex(u => u.id === store.currentUser.id);
                 if (userIdx !== -1) store.users[userIdx].status = status;
                 
-                // If we're in the tarologo view, we might want to update the UI indicator (added later)
-                const statusIndicator = document.getElementById('user-status-indicator');
-                if (statusIndicator) {
-                    const colors = {
-                        'online': 'bg-green-500',
-                        'busy': 'bg-red-500',
-                        'away': 'bg-yellow-500',
-                        'offline': 'bg-gray-500'
-                    };
-                    const labels = {
-                        'online': 'Online',
-                        'busy': 'Ocupado',
-                        'away': 'Ausente',
-                        'offline': 'Offline'
-                    };
-                    statusIndicator.className = `w-3 h-3 rounded-full ${colors[status] || 'bg-gray-500'}`;
-                    if (status === 'online') statusIndicator.classList.add('status-pulse');
-                    else statusIndicator.classList.remove('status-pulse');
-                    const statusText = document.getElementById('user-status-text');
-                    if (statusText) statusText.textContent = labels[status] || 'Offline';
-                }
+                // Update UI indicators (Sidebar and Dashboard Card)
+                updateStatusUI(status);
+
             } catch (err) {
                 console.error("Erro ao atualizar status:", err);
+            }
+        }
+
+        function updateStatusUI(status) {
+            const colors = {
+                'online': 'bg-green-500',
+                'busy': 'bg-red-500',
+                'away': 'bg-yellow-500',
+                'offline': 'bg-gray-500'
+            };
+            const labels = {
+                'online': 'Online',
+                'busy': 'Ocupado',
+                'away': 'Ausente',
+                'offline': 'Offline'
+            };
+
+            // 1. Sidebar Indicator
+            const sideIndicator = document.getElementById('user-status-indicator');
+            const sideText = document.getElementById('user-status-text');
+            if (sideIndicator) {
+                sideIndicator.className = `w-3 h-3 rounded-full ${colors[status] || 'bg-gray-500'}`;
+                if (status === 'online') sideIndicator.classList.add('status-pulse');
+                else sideIndicator.classList.remove('status-pulse');
+            }
+            if (sideText) sideText.textContent = labels[status] || 'Offline';
+
+            // 2. Dashboard Card Indicator (if present in current view)
+            const cardIndicator = document.getElementById('card-status-indicator');
+            const cardText = document.getElementById('card-status-text');
+            const cardBtnGroup = document.getElementById('card-status-btns');
+
+            if (cardIndicator) {
+                cardIndicator.className = `w-4 h-4 rounded-full ${colors[status] || 'bg-gray-500'}`;
+                if (status === 'online') cardIndicator.classList.add('status-pulse');
+                else cardIndicator.classList.remove('status-pulse');
+            }
+            if (cardText) cardText.textContent = labels[status] || 'Offline';
+            
+            // Highlight active button in card
+            if (cardBtnGroup) {
+                cardBtnGroup.querySelectorAll('button').forEach(btn => {
+                    const btnStatus = btn.getAttribute('data-status');
+                    if (btnStatus === status) {
+                        btn.classList.add('ring-2', 'ring-offset-2', 'ring-indigo-500', 'bg-indigo-50');
+                    } else {
+                        btn.classList.remove('ring-2', 'ring-offset-2', 'ring-indigo-500', 'bg-indigo-50');
+                    }
+                });
             }
         }
 
@@ -631,7 +704,7 @@
                     store.currentUser = user;
                     localStorage.setItem('tarot_user', JSON.stringify(user));
                     
-                    // Set status to online if reader
+                    // Explicitly set to online on fresh login
                     if (user.role === 'tarologo') {
                         await updateUserStatus('online');
                     }
@@ -1300,6 +1373,10 @@
 
         // Tarólogo logic
         function initTarologoConsultas() {
+            // Update Status Card in this view
+            const currentStatus = store.currentUser.status || 'online';
+            updateStatusUI(currentStatus);
+
             const table = document.getElementById('tarologo-assigned-consultations');
             // Show both 'pending' (new) and 'active' (in progress) consultations
             const myConsults = store.consultations.filter(c => 
