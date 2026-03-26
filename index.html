@@ -743,15 +743,15 @@
             };
             document.getElementById('user-role-display').textContent = roleMap[store.currentUser.role] || store.currentUser.role;
 
-            // Start Realtime Notification Monitor
-            startNotificationMonitor();
-
+            // Start Realtime Monitors
             if (store.currentUser.role === 'admin') {
+                startAdminStatusMonitor(); // NEW: Monitor statuses globally for Admin
                 document.getElementById('admin-nav').classList.remove('hidden');
                 document.getElementById('tarologo-nav').classList.add('hidden');
                 document.getElementById('status-selector-container').classList.add('hidden');
                 renderView('admin-dashboard');
             } else {
+                startNotificationMonitor(); // Tarólogo needs notification monitor
                 document.getElementById('admin-nav').classList.add('hidden');
                 document.getElementById('tarologo-nav').classList.remove('hidden');
                 document.getElementById('status-selector-container').classList.remove('hidden');
@@ -762,6 +762,38 @@
                 
                 renderView('tarologo-consultas');
             }
+        }
+
+        function startAdminStatusMonitor() {
+            if (store.statusSubscription) supabaseClient.removeChannel(store.statusSubscription);
+            
+            console.log("Iniciando monitor de status global para o Administrador...");
+            
+            store.statusSubscription = supabaseClient
+                .channel('admin_global_status')
+                .on('postgres_changes', { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'users'
+                }, payload => {
+                    console.log("STATUS UPDATE RECEIVED (GLOBAL ADMIN):", payload.new);
+                    
+                    // Update global store
+                    const userIdx = store.users.findIndex(u => u.id === payload.new.id);
+                    if (userIdx !== -1) {
+                        store.users[userIdx] = payload.new;
+                        
+                        // Update UI if in relevant views
+                        if (store.currentView === 'admin-dashboard') {
+                            const activeCount = store.users.filter(u => u.role === 'tarologo' && u.status === 'online').length;
+                            const statEl = document.getElementById('stat-online-tarologos');
+                            if (statEl) statEl.textContent = activeCount;
+                        } else if (store.currentView === 'admin-tarologos') {
+                            renderAdminTarologosTable(); // Re-render the table
+                        }
+                    }
+                })
+                .subscribe();
         }
 
         function toggleStatusDropdown() {
@@ -1155,70 +1187,44 @@
         }
 
         function initAdminTarologos() {
+            renderAdminTarologosTable();
+        }
+
+        function renderAdminTarologosTable() {
             const table = document.getElementById('admin-tarologos-table');
-            
-            const renderTarologos = () => {
-                table.innerHTML = store.users.filter(u => u.role === 'tarologo').map(u => {
-                    const status = u.status || 'offline';
-                    const colors = {
-                        'online': 'bg-green-100 text-green-700',
-                        'busy': 'bg-red-100 text-red-700',
-                        'away': 'bg-yellow-100 text-yellow-700',
-                        'offline': 'bg-gray-100 text-gray-500'
-                    };
-                    const labels = {
-                        'online': 'Online',
-                        'busy': 'Ocupado',
-                        'away': 'Ausente',
-                        'offline': 'Offline'
-                    };
-                    
-                    return `
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-6 py-4 font-medium">${u.name}</td>
-                            <td class="px-6 py-4 text-sm">${u.username}</td>
-                            <td class="px-6 py-4">
-                                <span class="${colors[status]} px-2 py-1 rounded text-[10px] font-bold uppercase flex items-center gap-1.5 w-fit">
-                                    <span class="w-2 h-2 rounded-full ${status === 'online' ? 'bg-green-500' : status === 'busy' ? 'bg-red-500' : status === 'away' ? 'bg-yellow-500' : 'bg-gray-400'}"></span>
-                                    ${labels[status]}
-                                </span>
-                            </td>
-                            <td class="px-6 py-4">
-                                <button onclick="deleteTarologo('${u.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
-            };
+            if (!table) return;
 
-            renderTarologos();
-
-            // Real-time status monitor for Admin
-            if (store.statusSubscription) supabaseClient.removeChannel(store.statusSubscription);
-            
-            store.statusSubscription = supabaseClient
-                .channel('admin_status_monitor')
-                .on('postgres_changes', { 
-                    event: 'UPDATE', 
-                    schema: 'public', 
-                    table: 'users'
-                }, payload => {
-                    console.log("STATUS UPDATE RECEIVED:", payload.new);
-                    const userIdx = store.users.findIndex(u => u.id === payload.new.id);
-                    if (userIdx !== -1) {
-                        store.users[userIdx] = payload.new;
-                        if (store.currentView === 'admin-tarologos') {
-                            renderTarologos();
-                        }
-                        // Also update dashboard counts if visible
-                        if (store.currentView === 'admin-dashboard') {
-                            const activeCount = store.users.filter(u => u.role === 'tarologo' && u.status === 'online').length;
-                            const statEl = document.getElementById('stat-online-tarologos');
-                            if (statEl) statEl.textContent = activeCount;
-                        }
-                    }
-                })
-                .subscribe();
+            table.innerHTML = store.users.filter(u => u.role === 'tarologo').map(u => {
+                const status = u.status || 'offline';
+                const colors = {
+                    'online': 'bg-green-100 text-green-700',
+                    'busy': 'bg-red-100 text-red-700',
+                    'away': 'bg-yellow-100 text-yellow-700',
+                    'offline': 'bg-gray-100 text-gray-500'
+                };
+                const labels = {
+                    'online': 'Online',
+                    'busy': 'Ocupado',
+                    'away': 'Ausente',
+                    'offline': 'Offline'
+                };
+                
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 font-medium">${u.name}</td>
+                        <td class="px-6 py-4 text-sm">${u.username}</td>
+                        <td class="px-6 py-4">
+                            <span class="${colors[status]} px-2 py-1 rounded text-[10px] font-bold uppercase flex items-center gap-1.5 w-fit">
+                                <span class="w-2 h-2 rounded-full ${status === 'online' ? 'bg-green-500' : status === 'busy' ? 'bg-red-500' : status === 'away' ? 'bg-yellow-500' : 'bg-gray-400'} ${status === 'online' ? 'status-pulse' : ''}"></span>
+                                ${labels[status]}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <button onclick="deleteTarologo('${u.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         // Modals
