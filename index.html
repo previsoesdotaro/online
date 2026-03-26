@@ -1944,6 +1944,19 @@
             document.getElementById('active-consult-info').textContent = `Tempo total contratado: ${consult.minutes} min`;
             document.getElementById('active-consult-type').textContent = consult.type === 'phone' ? '📞 Telefone' : '💬 Chat';
             
+            const pauseBtn = document.getElementById('pause-consult-btn');
+            const updatePauseButtonUI = () => {
+                if (consult.status === 'paused') {
+                    pauseBtn.innerHTML = '<i class="fas fa-play"></i> Retomar Atendimento';
+                    pauseBtn.classList.remove('bg-gray-50', 'text-gray-600');
+                    pauseBtn.classList.add('bg-green-100', 'text-green-700', 'border-green-200');
+                } else {
+                    pauseBtn.innerHTML = '<i class="fas fa-pause"></i> Pausar Atendimento';
+                    pauseBtn.classList.add('bg-gray-50', 'text-gray-600');
+                    pauseBtn.classList.remove('bg-green-100', 'text-green-700', 'border-green-200');
+                }
+            };
+
             // MOSTRAR OVERLAY DE INÍCIO SE AINDA NÃO COMEÇOU
             const overlay = document.getElementById('start-consult-overlay');
             if (consult.status === 'pending') {
@@ -1954,7 +1967,8 @@
 
             updateTimerDisplay();
             loadMessages(consult.id);
-            
+            updatePauseButtonUI();
+
             const messageSubscription = supabaseClient
                 .channel(`chat_messages_${consult.id}`)
                 .on('postgres_changes', { 
@@ -1990,6 +2004,9 @@
                     
                     // Sincroniza status local para pausar/retomar cronômetro
                     consult.status = payload.new.status;
+                    
+                    // Atualiza botão de pausa no chat se estiver visível
+                    if (typeof updatePauseButtonUI === 'function') updatePauseButtonUI();
                     
                     if (payload.new.status === 'finished' && store.activeConsultation) {
                         finishConsultation('O cliente encerrou o atendimento ou o tempo acabou.');
@@ -2050,9 +2067,25 @@
                 }
             };
             
-            document.getElementById('pause-consult-btn').onclick = () => { 
-                clearInterval(store.timerInterval); 
-                alert('Atendimento pausado. O tempo parou de contar.'); 
+            pauseBtn.onclick = async () => { 
+                const newStatus = consult.status === 'paused' ? 'active' : 'paused';
+                
+                try {
+                    const { error } = await supabaseClient.from('consultas')
+                        .update({ status: newStatus })
+                        .eq('id', consult.id);
+                    
+                    if (error) throw error;
+                    
+                    consult.status = newStatus;
+                    updatePauseButtonUI();
+                    
+                    // Se for chat, o monitor de status (Realtime) já deve cuidar do resto,
+                    // mas atualizamos localmente para resposta instantânea.
+                    console.log(`Atendimento ${newStatus === 'paused' ? 'pausado' : 'retomado'} via chat.`);
+                } catch (err) {
+                    console.error("Erro ao alterar status da consulta:", err);
+                }
             };
         }
 
