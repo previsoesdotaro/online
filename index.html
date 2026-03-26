@@ -1205,7 +1205,9 @@
             // Chat History
             const chatBox = document.getElementById('client-messages');
             const loadClientMessages = async () => {
-                const { data: messages } = await supabaseClient.from('messages').select('*').eq('consultation_id', consultId).order('created_at', { ascending: true });
+                const { data: consultData } = await supabaseClient.from('consultas').select('chat_log').eq('id', consultId).single();
+                const messages = consultData ? (consultData.chat_log || []) : [];
+                
                 chatBox.innerHTML = '';
                 
                 // Reaplica a mensagem de espera se necessário
@@ -1224,86 +1226,90 @@
                 `;
                 chatBox.appendChild(waitingMsg);
                 
-                messages?.forEach(msg => addClientMessageToUI(msg, consult.client_id));
-                updateClientTimer(); // Atualiza visibilidade após carregar mensagens
+                messages.forEach(msg => addClientMessageToUI(msg, consult.client_id));
+                updateClientTimer();
             };
             await loadClientMessages();
 
-            // Real-time Chat
+            // Real-time Chat (Sync with chat_log)
             const clientChatSub = supabaseClient
                 .channel(`chat_messages_${consultId}`)
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `consultation_id=eq.${consultId}` }, payload => {
-                    console.log("NOVA MENSAGEM (CLIENTE RECEBENDO):", payload.new);
-                    addClientMessageToUI(payload.new, consult.client_id);
-                })
-                .subscribe((status) => {
-                    console.log("Realtime Chat Status (Cliente):", status);
-                });
-
-            // Finish Button for Client
-            document.getElementById('client-finish-btn').onclick = async () => {
-                if (confirm('Deseja realmente encerrar a consulta agora?')) {
-                    supabaseClient.removeChannel(clientConsultSub);
-                    supabaseClient.removeChannel(clientChatSub);
-                    
-                    // Lógica de finalização (igual à do tarólogo para devolver minutos)
-                    const remainingSeconds = consult.remaining_seconds;
-                    const remainingMinutes = Math.floor(remainingSeconds / 60);
-                    const usedMinutes = consult.minutes - remainingMinutes;
-
-                    try {
-                        if (remainingMinutes > 0) {
-                            const { data: cData } = await supabaseClient.from('clients').select('balance').eq('id', consult.client_id).single();
-                            if (cData) {
-                                await supabaseClient.from('clients').update({ balance: cData.balance + remainingMinutes }).eq('id', consult.client_id);
-                            }
+                .on('postgres_changes', { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'consultas', 
+                    filter: `id=eq.${consultId}` 
+                }, payload => {
+                    const newLog = payload.new.chat_log || [];
+                    const oldLog = consult.chat_log || [];
+                    if (newLog.length > oldLog.length) {
+                        const newMessage = newLog[newLog.length - 1];
+                        // Só mostra se for do tarólogo (evita duplicar o que eu acabei de enviar)
+                        if (newMessage.sender_id !== consult.client_id) {
+                            addClientMessageToUI(newMessage, consult.client_id);
+                            consult.chat_log = newLog;
                         }
-                        await supabaseClient.from('consultas').update({ 
-                            status: 'finished', 
-                            remaining_seconds: 0,
-                            minutes: usedMinutes > 0 ? usedMinutes : 0
-                        }).eq('id', consultId);
-                        
-                        alert("Consulta finalizada com sucesso.");
-                        location.reload();
-                    } catch (err) {
-                        console.error(err);
                     }
-                }
-            };
+                })
+                 .subscribe();
+ 
+             // Finish Button for Client
+             document.getElementById('client-finish-btn').onclick = async () => {
+                 if (confirm('Deseja realmente encerrar a consulta agora?')) {
+                     // Lógica de finalização (igual à do tarólogo para devolver minutos)
+                     const remainingSeconds = consult.remaining_seconds;
+                     const remainingMinutes = Math.floor(remainingSeconds / 60);
+                     const usedMinutes = consult.minutes - remainingMinutes;
 
-            // Send Message
+                     try {
+                         if (remainingMinutes > 0) {
+                             const { data: cData } = await supabaseClient.from('clients').select('balance').eq('id', consult.client_id).single();
+                             if (cData) {
+                                 await supabaseClient.from('clients').update({ balance: cData.balance + remainingMinutes }).eq('id', consult.client_id);
+                             }
+                         }
+                         await supabaseClient.from('consultas').update({ 
+                             status: 'finished', 
+                             remaining_seconds: 0,
+                             minutes: usedMinutes > 0 ? usedMinutes : 0,
+                             ended_at: new Date().toISOString()
+                         }).eq('id', consultId);
+                         
+                         alert("Consulta finalizada com sucesso.");
+                         location.reload();
+                     } catch (err) {
+                         console.error(err);
+                         alert("Erro ao finalizar: " + err.message);
+                     }
+                 }
+             };
+ 
+             // Send Message (Client)
             document.getElementById('client-chat-form').onsubmit = async (e) => {
                 e.preventDefault();
                 const input = document.getElementById('client-chat-input');
                 const text = input.value.trim();
                 if (!text) return;
                 
+                const clientName = (consult.clients && consult.clients.name) ? consult.clients.name : 'Cliente';
+                const message = {
+                    sender_id: consult.client_id,
+                    sender_name: clientName,
+                    text: text,
+                    created_at: new Date().toISOString()
+                };
+
+                // Atualiza localmente e no banco
+                consult.chat_log = consult.chat_log || [];
+                consult.chat_log.push(message);
+                addClientMessageToUI(message, consult.client_id);
+                
                 input.value = '';
                 
-                // Validação dos dados do cliente para evitar erro
-                const clientName = (consult.clients && consult.clients.name) ? consult.clients.name : 'Cliente';
-                const clientId = consult.client_id;
-                
-                console.log("CLIENTE TENTANDO ENVIAR MENSAGEM:", { text, clientId, clientName });
-
                 try {
-                    const { error: insertError } = await supabaseClient.from('messages').insert([{
-                        consultation_id: consultId,
-                        sender_id: clientId,
-                        sender_name: clientName,
-                        text: text
-                    }]);
-
-                    if (insertError) {
-                        console.error("ERRO AO INSERIR MENSAGEM DO CLIENTE:", insertError);
-                        alert("Erro ao enviar mensagem: " + insertError.message);
-                    } else {
-                        console.log("MENSAGEM DO CLIENTE ENVIADA COM SUCESSO!");
-                    }
+                    await supabaseClient.from('consultas').update({ chat_log: consult.chat_log }).eq('id', consultId);
                 } catch (err) {
-                    console.error("ERRO INESPERADO NO ENVIO DO CLIENTE:", err);
-                    alert("Erro inesperado no envio.");
+                    console.error("Erro ao enviar mensagem do cliente:", err);
                 }
             };
         }
@@ -1502,18 +1508,43 @@
                 const mins = parseInt(document.getElementById('consult-minutes').value);
                 const type = document.getElementById('consult-type').value;
                 const client = store.clients.find(c => c.id === cid);
-                await supabaseClient.from('consultas').insert([{ 
-                    client_id: cid, 
-                    tarologo_id: tid, 
-                    minutes: mins, 
-                    remaining_seconds: mins * 60, 
-                    status: 'pending',
-                    type: type,
-                    client_name: client.name // Adicionado para o histórico
-                }]);
-                await supabaseClient.from('clients').update({ balance: client.balance - mins }).eq('id', cid);
-                closeModal();
-                showDashboard();
+                
+                if (!client) {
+                    alert('Erro: Cliente não encontrado.');
+                    return;
+                }
+
+                const submitBtn = e.target.querySelector('button');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Lançando...';
+
+                try {
+                    const { error: insertError } = await supabaseClient.from('consultas').insert([{ 
+                        client_id: cid, 
+                        tarologo_id: tid, 
+                        minutes: mins, 
+                        remaining_seconds: mins * 60, 
+                        status: 'pending',
+                        type: type,
+                        client_name: client.name
+                    }]);
+
+                    if (insertError) throw insertError;
+
+                    const { error: updateError } = await supabaseClient.from('clients').update({ balance: client.balance - mins }).eq('id', cid);
+                    if (updateError) throw updateError;
+
+                    closeModal();
+                    await showDashboard();
+                    alert('Consulta lançada com sucesso!');
+
+                } catch (err) {
+                    console.error("Erro ao lançar consulta:", err);
+                    alert('Erro ao lançar consulta no banco de dados: ' + err.message);
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Lançar';
+                }
             };
         }
 
@@ -1734,7 +1765,7 @@
                 addMessageToUI(message);
                 
                 input.value = '';
-                await supabaseClient.from('consultations').update({ chat_log: consult.chat_log }).eq('id', consult.id);
+                await supabaseClient.from('consultas').update({ chat_log: consult.chat_log }).eq('id', consult.id);
             };
 
             document.getElementById('finish-consult-btn').onclick = () => {
@@ -1817,7 +1848,7 @@
                 // Garantimos que o tempo usado seja no mínimo 0
                 const finalUsedMinutes = usedMinutes > 0 ? usedMinutes : 0;
                 
-                await supabaseClient.from('consultations').update({ 
+                await supabaseClient.from('consultas').update({ 
                     status: 'finished', 
                     remaining_seconds: 0,
                     minutes: finalUsedMinutes, // Atualiza para o tempo real usado
