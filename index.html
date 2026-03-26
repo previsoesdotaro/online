@@ -1780,14 +1780,16 @@
             if (!consult) return;
 
             try {
-                // Ativa a consulta no banco
-                await supabaseClient.from('consultas').update({ 
+                // Ativa a consulta no banco com o horário de início
+                const { error } = await supabaseClient.from('consultas').update({ 
                     status: 'active',
-                    started_at: new Date().toISOString() 
+                    started_at: new Date().toISOString()
                 }).eq('id', id);
                 
+                if (error) throw error;
+
                 consult.status = 'active';
-                updateUserStatus('busy');
+                await updateUserStatus('busy');
                 
                 // Se for chat, abre a tela de chat. Se for telefone, fica na lista.
                 if (consult.type === 'chat') {
@@ -1797,6 +1799,7 @@
                 }
             } catch (err) {
                 console.error("Erro ao iniciar consulta direta:", err);
+                alert("Erro ao iniciar atendimento: " + (err.message || "Erro de banco de dados"));
             }
         }
 
@@ -2097,7 +2100,7 @@
                 await supabaseClient.from('consultas').update({ 
                     status: 'finished', 
                     remaining_seconds: 0,
-                    minutes: finalUsedMinutes, // Atualiza para o tempo real usado
+                    minutes: finalUsedMinutes,
                     ended_at: new Date().toISOString()
                 }).eq('id', consult.id);
 
