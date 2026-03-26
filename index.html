@@ -370,13 +370,13 @@
                                     <span class="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-[9px] font-black uppercase">TOTAL GERAL</span>
                                 </td>
                                 <td class="px-4 py-3 border-r bg-blue-50/30"></td>
-                                <td class="px-4 py-3 border-r text-center">R$ 4.000,00</td>
+                                <td id="goal-mensal-target" class="px-4 py-3 border-r text-center">R$ 0,00</td>
                                 <td id="goal-mensal-realizado" class="px-4 py-3 border-r text-center font-bold text-blue-700">R$ 0,00</td>
-                                <td id="goal-mensal-faltante" class="px-4 py-3 border-r text-center text-red-500">R$ 4.000,00</td>
+                                <td id="goal-mensal-faltante" class="px-4 py-3 border-r text-center text-red-500">R$ 0,00</td>
                                 <td class="px-4 py-3 border-r bg-blue-50/30"></td>
-                                <td class="px-4 py-3 border-r text-center">R$ 132,00</td>
+                                <td id="goal-diario-target" class="px-4 py-3 border-r text-center">R$ 0,00</td>
                                 <td id="goal-diario-realizado" class="px-4 py-3 border-r text-center font-bold text-green-600">R$ 0,00</td>
-                                <td id="goal-diario-faltante" class="px-4 py-3 text-center text-red-500">R$ 132,00</td>
+                                <td id="goal-diario-faltante" class="px-4 py-3 text-center text-red-500">R$ 0,00</td>
                             </tr>
                         </tbody>
                     </table>
@@ -726,17 +726,25 @@
             // Lógica de Comissão: R$ 0,50 por minuto
             const calculateEarnings = (consults) => consults.reduce((acc, c) => acc + (c.minutes || 0) * 0.50, 0);
 
-            // 1. Total Mensal (Considerando todas as finalizadas no sistema para este tarólogo)
-            const mensalEarnings = calculateEarnings(myFinishedConsults);
+            // 1. Total Mensal (Apenas finalizadas no mês atual)
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            
+            const mensalConsults = myFinishedConsults.filter(c => {
+                const date = new Date(c.created_at);
+                return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+            });
+            const mensalEarnings = calculateEarnings(mensalConsults);
             
             // 2. Total Diário (Apenas as finalizadas hoje)
-            const today = new Date().toLocaleDateString();
+            const today = now.toLocaleDateString();
             const dailyConsults = myFinishedConsults.filter(c => new Date(c.created_at).toLocaleDateString() === today);
             const dailyEarnings = calculateEarnings(dailyConsults);
 
-            // Metas Fixas
-            const META_MEN_VALOR = 4000.00;
-            const META_DIA_VALOR = 132.00;
+            // Metas Dinâmicas (Vem do Banco de Dados)
+            const META_MEN_VALOR = store.currentUser.monthly_goal || 0;
+            const META_DIA_VALOR = store.currentUser.daily_goal || 0;
 
             // Atualiza Sidebar
             const display = document.getElementById('sidebar-earnings');
@@ -747,19 +755,30 @@
             const goalMensalFaltante = document.getElementById('goal-mensal-faltante');
             const goalDiarioRealizado = document.getElementById('goal-diario-realizado');
             const goalDiarioFaltante = document.getElementById('goal-diario-faltante');
+            
+            // Atualiza labels de meta na tabela
+            const metaMensalTarget = document.getElementById('goal-mensal-target');
+            const metaDiariaTarget = document.getElementById('goal-diario-target');
+            
+            if (metaMensalTarget) {
+                metaMensalTarget.textContent = `R$ ${META_MEN_VALOR.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            }
+            if (metaDiariaTarget) {
+                metaDiariaTarget.textContent = `R$ ${META_DIA_VALOR.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            }
 
             if (goalMensalRealizado) {
                 goalMensalRealizado.textContent = `R$ ${mensalEarnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
                 const faltanteMensal = Math.max(0, META_MEN_VALOR - mensalEarnings);
                 goalMensalFaltante.textContent = `R$ ${faltanteMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-                goalMensalFaltante.className = `px-4 py-3 border-r text-center ${faltanteMensal === 0 ? 'text-green-600 font-bold' : 'text-red-500'}`;
+                goalMensalFaltante.className = `px-4 py-3 border-r text-center ${faltanteMensal === 0 && META_MEN_VALOR > 0 ? 'text-green-600 font-bold' : 'text-red-500'}`;
             }
 
             if (goalDiarioRealizado) {
                 goalDiarioRealizado.textContent = `R$ ${dailyEarnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
                 const faltanteDiario = Math.max(0, META_DIA_VALOR - dailyEarnings);
                 goalDiarioFaltante.textContent = `R$ ${faltanteDiario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-                goalDiarioFaltante.className = `px-4 py-3 text-center ${faltanteDiario === 0 ? 'text-green-600 font-bold' : 'text-red-500'}`;
+                goalDiarioFaltante.className = `px-4 py-3 text-center ${faltanteDiario === 0 && META_DIA_VALOR > 0 ? 'text-green-600 font-bold' : 'text-red-500'}`;
             }
         }
 
@@ -1516,12 +1535,64 @@
                                 ${labels[status]}
                             </span>
                         </td>
-                        <td class="px-6 py-4">
+                        <td class="px-6 py-4 text-xs">
+                            <div class="text-gray-500 italic">Mês: R$ ${(u.monthly_goal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                            <div class="text-gray-500 italic">Dia: R$ ${(u.daily_goal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                        </td>
+                        <td class="px-6 py-4 flex gap-3">
+                            <button onclick="openEditGoalsModal('${u.id}')" class="text-blue-600 hover:text-blue-800" title="Editar Metas"><i class="fas fa-bullseye"></i></button>
                             <button onclick="deleteTarologo('${u.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        function openEditGoalsModal(tarologoId) {
+            const user = store.users.find(u => u.id === tarologoId);
+            if (!user) return;
+
+            openModal(`Editar Metas: ${user.name}`, `
+                <form id="edit-goals-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Meta Mensal (R$)</label>
+                        <input type="number" step="0.01" id="goal-monthly" class="w-full border p-2 rounded" value="${user.monthly_goal || 0}" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Meta Diária (R$)</label>
+                        <input type="number" step="0.01" id="goal-daily" class="w-full border p-2 rounded" value="${user.daily_goal || 0}" required>
+                    </div>
+                    <div class="flex gap-2 pt-4">
+                        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 py-2 rounded font-bold">Cancelar</button>
+                        <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded font-bold">Salvar Metas</button>
+                    </div>
+                </form>
+            `);
+
+            document.getElementById('edit-goals-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const monthly = parseFloat(document.getElementById('goal-monthly').value);
+                const daily = parseFloat(document.getElementById('goal-daily').value);
+
+                try {
+                    const { error } = await supabaseClient
+                        .from('users')
+                        .update({ 
+                            monthly_goal: monthly, 
+                            daily_goal: daily 
+                        })
+                        .eq('id', tarologoId);
+
+                    if (error) throw error;
+                    
+                    alert('Metas atualizadas com sucesso!');
+                    closeModal();
+                    await loadInitialData(); // Atualiza a lista
+                } catch (err) {
+                    console.error("Erro ao salvar metas:", err);
+                    alert("Erro ao salvar: " + (err.message || "Erro desconhecido"));
+                }
+            };
         }
 
         // Modals
