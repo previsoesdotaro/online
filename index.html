@@ -382,6 +382,29 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Últimas consultas realizadas (From Photo) -->
+            <div class="mt-8 bg-white rounded-lg shadow-sm border border-blue-200 overflow-hidden">
+                <div class="bg-blue-600 text-white p-3">
+                    <h4 class="font-bold text-sm uppercase tracking-wider">Últimas consultas realizadas</h4>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-[11px] border-collapse">
+                        <thead>
+                            <tr class="bg-gray-100 text-gray-500 uppercase font-bold border-b">
+                                <th class="px-4 py-2 border-r">ID</th>
+                                <th class="px-4 py-2 border-r">CLIENTE</th>
+                                <th class="px-4 py-2 text-center border-r">INICIADA EM</th>
+                                <th class="px-4 py-2 text-center border-r">DURAÇÃO</th>
+                                <th class="px-4 py-2 text-center">COMISSÃO</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tarologo-finished-consultations-table" class="divide-y font-medium text-gray-700">
+                            <!-- Rows injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </template>
 
@@ -1474,16 +1497,17 @@
             document.getElementById('stat-online-tarologos').textContent = store.users.filter(u => u.role === 'tarologo' && u.status === 'online').length;
 
             const table = document.getElementById('admin-consultations-table');
-            const ongoingConsultations = store.consultations.filter(c => c.status !== 'finished');
+            // Mostra todas as consultas que não foram deletadas (para o admin poder editar as finalizadas também se precisar)
+            const allConsultations = [...store.consultations].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-            table.innerHTML = ongoingConsultations.map(c => {
+            table.innerHTML = allConsultations.map(c => {
                 const client = store.clients.find(cl => cl.id === c.client_id);
                 const tarologo = store.users.find(u => u.id === c.tarologo_id);
                 return `
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 font-mono text-sm">#${c.id.substring(0,8)}</td>
                         <td class="px-6 py-4 font-medium">${client ? client.name : 'N/A'}</td>
-                        <td class="px-6 py-4">${c.minutes} min</td>
+                        <td class="px-6 py-4 font-bold text-indigo-600">${c.minutes} min</td>
                         <td class="px-6 py-4 font-medium text-purple-700">${tarologo ? tarologo.name : 'Não atribuído'}</td>
                         <td class="px-6 py-4">
                             <span class="px-2 py-1 rounded-full text-xs font-bold ${
@@ -1493,13 +1517,60 @@
                                 ${c.status === 'pending' ? 'Aguardando' : (c.status === 'active' ? 'Em Atendimento' : (c.status === 'paused' ? 'Pausado' : 'Finalizada'))}
                             </span>
                         </td>
-                        <td class="px-6 py-4">
-                            <button onclick="copyClientLink('${c.id}')" class="text-indigo-600 hover:text-indigo-800 mr-3" title="Copiar Link do Cliente"><i class="fas fa-link"></i></button>
+                        <td class="px-6 py-4 flex gap-3">
+                            <button onclick="openEditConsultationModal('${c.id}')" class="text-blue-600 hover:text-blue-800" title="Editar Tempo da Consulta"><i class="fas fa-edit"></i></button>
+                            <button onclick="copyClientLink('${c.id}')" class="text-indigo-600 hover:text-indigo-800" title="Copiar Link do Cliente"><i class="fas fa-link"></i></button>
                             <button onclick="deleteConsultation('${c.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        function openEditConsultationModal(consultationId) {
+            const consult = store.consultations.find(c => c.id === consultationId);
+            if (!consult) return;
+
+            const client = store.clients.find(cl => cl.id === consult.client_id);
+
+            openModal(`Editar Consulta: #${consultationId.substring(0,8)}`, `
+                <div class="mb-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+                    <p><strong>Cliente:</strong> ${client ? client.name : 'N/A'}</p>
+                    <p><strong>Status Atual:</strong> ${consult.status.toUpperCase()}</p>
+                </div>
+                <form id="edit-consult-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Duração da Consulta (minutos)</label>
+                        <input type="number" id="edit-consult-minutes" class="w-full border p-2 rounded" value="${consult.minutes}" required min="1">
+                        <p class="text-[10px] text-gray-400 mt-1 italic">* Alterar o tempo aqui afetará diretamente a comissão do tarólogo e o histórico do cliente.</p>
+                    </div>
+                    <div class="flex gap-2 pt-4">
+                        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 py-2 rounded font-bold">Cancelar</button>
+                        <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded font-bold">Salvar Alteração</button>
+                    </div>
+                </form>
+            `);
+
+            document.getElementById('edit-consult-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const newMinutes = parseInt(document.getElementById('edit-consult-minutes').value);
+
+                try {
+                    const { error } = await supabaseClient
+                        .from('consultas')
+                        .update({ minutes: newMinutes })
+                        .eq('id', consultationId);
+
+                    if (error) throw error;
+                    
+                    alert('Consulta atualizada com sucesso!');
+                    closeModal();
+                    await loadInitialData(); // Atualiza tudo (consultas e ganhos)
+                } catch (err) {
+                    console.error("Erro ao atualizar consulta:", err);
+                    alert("Erro ao salvar: " + (err.message || "Erro desconhecido"));
+                }
+            };
         }
 
         function initAdminClients() {
@@ -1887,6 +1958,43 @@
             } else {
                 activeSection.classList.add('hidden');
                 stopGlobalTimer();
+            }
+
+            // 3. Renderizar Últimas Consultas Realizadas
+            const tableFinished = document.getElementById('tarologo-finished-consultations-table');
+            if (tableFinished) {
+                const finishedConsults = myConsults
+                    .filter(c => c.status === 'finished')
+                    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // Mais recentes primeiro
+                    .slice(0, 5); // Mostrar apenas as últimas 5
+
+                tableFinished.innerHTML = finishedConsults.map(c => {
+                    const client = store.clients.find(cl => cl.id === c.client_id);
+                    const comissao = (c.minutes || 0) * 0.50;
+                    const iniciadaEm = new Date(c.created_at).toLocaleString('pt-BR', { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+
+                    return `
+                        <tr class="hover:bg-gray-50 border-b">
+                            <td class="px-4 py-3 border-r font-bold text-gray-400">#${c.id.substring(0, 6)}</td>
+                            <td class="px-4 py-3 border-r">
+                                <div class="font-bold text-gray-700 uppercase">${client ? client.name : 'N/A'}</div>
+                                <button class="bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-[9px] font-bold mt-1 flex items-center gap-1">
+                                    <i class="fas fa-phone-alt"></i> REAGENDAR
+                                </button>
+                            </td>
+                            <td class="px-4 py-3 border-r text-center text-gray-500">${iniciadaEm}</td>
+                            <td class="px-4 py-3 border-r text-center font-bold text-gray-600">${c.minutes} MINUTO(S)</td>
+                            <td class="px-4 py-3 text-center font-bold text-blue-600">R$ ${comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                    `;
+                }).join('') || '<tr><td colspan="5" class="p-4 text-center text-gray-400 italic">Nenhum atendimento finalizado recentemente.</td></tr>';
             }
         }
 
