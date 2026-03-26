@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Tarot - Previsões</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .sidebar { transition: all 0.3s; }
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+    <div id="app">
+        <!-- Login Screen -->
+        <div id="login-screen" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-indigo-800">
+            <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+                <div class="text-center mb-8">
+                    <h1 class="text-3xl font-bold text-indigo-900">Portal Tarot</h1>
+                    <p class="text-gray-500">Acesse seu painel de atendimento</p>
+                </div>
+                <form id="login-form">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                        <input type="text" id="username" class="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Digite seu usuário" required>
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                        <input type="password" id="password" class="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-md transition duration-200">
+                        Entrar
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Main Dashboard (Hidden by default) -->
+        <div id="main-dashboard" class="hidden min-h-screen flex">
+            <!-- Sidebar -->
+            <div class="sidebar w-64 bg-indigo-900 text-white flex-shrink-0">
+                <div class="p-6 text-center border-b border-indigo-800">
+                    <h2 class="text-2xl font-bold">Tarot Panel</h2>
+                    <p id="user-role-display" class="text-xs text-indigo-300 mt-1 uppercase tracking-wider font-semibold"></p>
+                </div>
+                <nav class="mt-6">
+                    <div id="admin-nav" class="hidden">
+                        <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3 active" data-view="admin-dashboard">
+                            <i class="fas fa-chart-line"></i> Dashboard
+                        </a>
+                        <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3" data-view="admin-clients">
+                            <i class="fas fa-users"></i> Clientes
+                        </a>
+                        <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3" data-view="admin-tarologos">
+                            <i class="fas fa-user-tie"></i> Tarólogos
+                        </a>
+                    </div>
+                    <div id="tarologo-nav" class="hidden">
+                        <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3 active" data-view="tarologo-consultas">
+                            <i class="fas fa-list"></i> Minha Lista
+                        </a>
+                        <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3" data-view="tarologo-chat">
+                            <i class="fas fa-comments"></i> Chat de Atendimento
+                        </a>
+                    </div>
+                    <div class="px-6 py-4 mt-6 border-t border-indigo-800">
+                        <p class="text-[10px] text-indigo-400 font-bold uppercase mb-1">Meus Ganhos (Mês)</p>
+                        <p id="sidebar-earnings" class="text-xl font-bold text-green-400">R$ 0,00</p>
+                    </div>
+                    <a href="#" id="logout-btn" class="block py-3 px-6 hover:bg-red-800 text-red-300 mt-4 flex items-center gap-3">
+                        <i class="fas fa-sign-out-alt"></i> Sair
+                    </a>
+                </nav>
+            </div>
+
+            <!-- Content Area -->
+            <div class="flex-1 flex flex-col">
+                <!-- Topbar -->
+                <header class="bg-white shadow-sm h-16 flex items-center justify-between px-8">
+                    <h3 id="view-title" class="text-xl font-semibold text-gray-700">Dashboard</h3>
+                    <div class="flex items-center gap-4">
+                        <span id="current-user-name" class="font-medium">Admin</span>
+                        <div class="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold">
+                            <i class="fas fa-user"></i>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- Dynamic Content Views -->
+                <main id="view-content" class="p-8 overflow-y-auto">
+                    <!-- Views will be injected here -->
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals (Injected via JS) -->
+    <div id="modal-container" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div id="modal-content" class="bg-white rounded-lg shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 relative">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Template Views (Hidden) -->
+    <template id="view-admin-dashboard">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-blue-600">
+                <p class="text-xs text-gray-500 uppercase font-bold tracking-wider">Total de Clientes</p>
+                <h4 class="text-3xl font-bold mt-1 text-blue-600" id="stat-total-clients">0</h4>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-600">
+                <p class="text-xs text-gray-500 uppercase font-bold tracking-wider">Consultas Hoje</p>
+                <h4 class="text-3xl font-bold mt-1 text-green-600" id="stat-today-consults">0</h4>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-purple-600">
+                <p class="text-xs text-gray-500 uppercase font-bold tracking-wider">Tarólogos Ativos</p>
+                <h4 class="text-3xl font-bold mt-1 text-purple-600" id="stat-online-tarologos">0</h4>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-blue-200">
+            <div class="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
+                <h4 class="font-bold text-lg">Consultas em Aberto</h4>
+                <button onclick="openNewConsultationModal()" class="bg-blue-500 hover:bg-blue-400 px-4 py-2 rounded text-sm font-medium transition flex items-center gap-2">
+                    <i class="fas fa-plus"></i> Nova Consulta
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
+                        <tr>
+                            <th class="px-6 py-4">ID</th>
+                            <th class="px-6 py-4">CLIENTE</th>
+                            <th class="px-6 py-4">TEMPO (MIN)</th>
+                            <th class="px-6 py-4">TARÓLOGO</th>
+                            <th class="px-6 py-4">STATUS</th>
+                            <th class="px-6 py-4">AÇÕES</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-consultations-table" class="divide-y">
+                        <!-- Rows injected by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <template id="view-admin-clients">
+        <div class="bg-white rounded-lg shadow-sm border border-blue-200">
+            <div class="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
+                <h4 class="font-bold text-lg">Gerenciamento de Clientes</h4>
+                <button onclick="openNewClientModal()" class="bg-blue-500 hover:bg-blue-400 px-4 py-2 rounded text-sm font-medium transition flex items-center gap-2">
+                    <i class="fas fa-user-plus"></i> Adicionar Cliente
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
+                        <tr>
+                            <th class="px-6 py-4">NOME</th>
+                            <th class="px-6 py-4">CPF</th>
+                            <th class="px-6 py-4">CONTATO</th>
+                            <th class="px-6 py-4">SALDO (MIN)</th>
+                            <th class="px-6 py-4">AÇÕES</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-clients-table" class="divide-y">
+                        <!-- Rows injected by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <template id="view-admin-tarologos">
+        <div class="bg-white rounded-lg shadow-sm border border-blue-200">
+            <div class="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
+                <h4 class="font-bold text-lg">Gerenciamento de Tarólogos</h4>
+                <button onclick="openNewTarologoModal()" class="bg-blue-500 hover:bg-blue-400 px-4 py-2 rounded text-sm font-medium transition">
+                    Adicionar Tarólogo
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
+                        <tr>
+                            <th class="px-6 py-4">NOME</th>
+                            <th class="px-6 py-4">USUÁRIO</th>
+                            <th class="px-6 py-4">PAPEL</th>
+                            <th class="px-6 py-4">AÇÕES</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-tarologos-table" class="divide-y">
+                        <!-- Rows injected by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <template id="view-tarologo-consultas">
+        <div class="space-y-6">
+            <!-- Consultas em Aberto -->
+            <div class="bg-white rounded-lg shadow-sm border border-blue-200">
+                <div class="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
+                    <h4 class="font-bold text-lg">Novas Consultas para você</h4>
+                    <button onclick="renderView('tarologo-consultas')" class="bg-blue-500 hover:bg-blue-400 px-3 py-1 rounded text-sm flex items-center gap-2">
+                        <i class="fas fa-sync-alt"></i> Atualizar
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
+                            <tr>
+                                <th class="px-6 py-4">CLIENTE</th>
+                                <th class="px-6 py-4">CRÉDITOS (R$)</th>
+                                <th class="px-6 py-4">TEMPO (MIN)</th>
+                                <th class="px-6 py-4">TIPO</th>
+                                <th class="px-6 py-4 text-center">AÇÕES</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tarologo-assigned-consultations" class="divide-y">
+                            <!-- Rows injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Metas / Comissões Section (From Photo) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow-sm border border-blue-200">
+                    <div class="bg-blue-600 text-white p-4 rounded-t-lg">
+                        <h4 class="font-bold text-lg">Vales</h4>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="flex justify-between items-center border-b pb-2">
+                            <span class="text-gray-600">Total de comissões</span>
+                            <span id="total-comissoes" class="font-bold text-blue-600">R$ 0,00</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b pb-2">
+                            <span class="text-gray-600">Meta</span>
+                            <span class="font-bold text-green-600">R$ 4.000,00</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600 font-bold">À receber</span>
+                            <span id="total-receber" class="font-bold text-red-600">R$ 0,00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-sm border border-blue-200">
+                    <div class="bg-blue-600 text-white p-4 rounded-t-lg">
+                        <h4 class="font-bold text-lg">Metas</h4>
+                    </div>
+                    <div class="p-6">
+                        <div class="grid grid-cols-2 gap-4 text-center">
+                            <div class="bg-blue-50 p-4 rounded">
+                                <p class="text-xs text-blue-600 font-bold uppercase">Mensal</p>
+                                <p id="mensal-realizado" class="text-xl font-bold">R$ 0,00</p>
+                                <p class="text-xs text-gray-500 mt-1">Valor Realizado</p>
+                            </div>
+                            <div class="bg-green-50 p-4 rounded">
+                                <p class="text-xs text-green-600 font-bold uppercase">Diário</p>
+                                <p class="text-xl font-bold">R$ 132,00</p>
+                                <p class="text-xs text-gray-500 mt-1">Meta do Dia</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="view-tarologo-chat">
+        <div id="no-active-consult" class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center text-gray-400 italic">
+            Nenhuma consulta em andamento. Selecione uma na sua "Minha Lista" para começar.
+        </div>
+        
+        <div id="active-consultation-section" class="hidden h-[calc(100vh-160px)]">
+            <div class="flex flex-col md:flex-row gap-6 h-full">
+                <!-- Left Sidebar: Info & Control -->
+                <div class="md:w-1/4 flex flex-col items-center justify-between bg-white p-6 rounded-lg border border-gray-200 shadow-sm h-full overflow-y-auto">
+                    <div class="w-full">
+                        <!-- Client Header -->
+                        <div class="text-center mb-8 border-b pb-6">
+                            <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <i class="fas fa-user text-2xl"></i>
+                            </div>
+                            <h5 id="active-client-name" class="text-xl font-bold text-gray-800 break-words">Maria Silva</h5>
+                            <p class="text-xs text-gray-400 mt-1 uppercase tracking-tighter">Em atendimento agora</p>
+                        </div>
+                        
+                        <!-- Discrete Timer Card -->
+                        <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-6 shadow-sm">
+                            <p class="text-[10px] text-indigo-400 font-bold uppercase mb-1">Tempo Restante</p>
+                            <div class="flex items-center justify-center gap-3">
+                                <i class="fas fa-clock text-indigo-400 text-xl"></i>
+                                <div id="consultation-timer" class="text-4xl font-mono font-bold text-indigo-700 tracking-tight">15:00</div>
+                            </div>
+                            <p id="active-consult-info" class="text-[9px] text-indigo-400 text-center mt-2 italic">Duração total: 15 min</p>
+                        </div>
+
+                        <div class="bg-gray-50 p-4 rounded-lg text-sm text-gray-600 space-y-2">
+                            <p class="text-[10px] text-gray-400 font-bold uppercase">Tipo de Atendimento</p>
+                            <p id="active-consult-type" class="text-gray-700 font-bold uppercase">-</p>
+                        </div>
+
+                        <button onclick="copyClientLink(store.activeConsultation.id)" class="w-full mt-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold py-2 rounded-lg border border-indigo-200 text-xs flex items-center justify-center gap-2">
+                            <i class="fas fa-link"></i> Copiar Link para o Cliente
+                        </button>
+                    </div>
+
+                    <div class="w-full pt-6 border-t mt-auto space-y-2">
+                        <button id="pause-consult-btn" class="w-full bg-gray-50 hover:bg-gray-100 text-gray-600 font-semibold py-2 px-4 rounded-lg transition-all text-sm flex items-center justify-center gap-2 border border-gray-200">
+                            <i class="fas fa-pause"></i> Pausar
+                        </button>
+                        <button id="finish-consult-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-all flex items-center justify-center gap-2 active:scale-95">
+                            <i class="fas fa-stop"></i> Finalizar Consulta
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Main: Chat Area -->
+                <div class="flex-1 flex flex-col bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden h-full relative">
+                    <!-- Chat Header with Mini Timer -->
+                    <div class="bg-white p-4 border-b flex items-center justify-between z-10">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shadow-sm">
+                                <i class="fas fa-comments"></i>
+                            </div>
+                            <div>
+                                <span class="text-sm font-bold text-gray-700">Chat de Atendimento</span>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                    <span class="text-[10px] text-gray-400 font-medium uppercase">Conexão Segura Ativa</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Mini timer for extra visibility if needed -->
+                        <div class="bg-gray-100 px-3 py-1 rounded-full text-xs font-mono font-bold text-gray-600 flex items-center gap-2">
+                            <i class="fas fa-stopwatch"></i>
+                            <span id="mini-timer">15:00</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Messages Window -->
+                    <div id="chat-messages" class="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50/50 scroll-smooth">
+                        <!-- Messages injected by JS -->
+                    </div>
+
+                    <!-- Input Area -->
+                    <form id="chat-form" class="p-4 bg-white border-t flex gap-3">
+                        <div class="flex-1 relative">
+                            <input type="text" id="chat-input" class="w-full border border-gray-200 rounded-2xl pl-5 pr-12 py-4 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-all text-gray-700" placeholder="Digite aqui sua resposta...">
+                            <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-indigo-500 p-2 transition">
+                                <i class="fas fa-smile text-xl"></i>
+                            </button>
+                        </div>
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white w-14 h-14 rounded-2xl flex items-center justify-center transition shadow-lg shadow-indigo-100 active:scale-95 group">
+                            <i class="fas fa-paper-plane text-xl group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="view-client-chat">
+        <div id="client-loading" class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+            <i class="fas fa-spinner fa-spin text-4xl text-indigo-600 mb-4"></i>
+            <p class="text-gray-500">Conectando à sua consulta...</p>
+        </div>
+        
+        <div id="client-chat-section" class="hidden h-[calc(100vh-100px)] max-w-4xl mx-auto">
+            <div class="flex flex-col h-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden relative">
+                <!-- Header -->
+                <div class="bg-indigo-600 p-4 text-white flex items-center justify-between shadow-md">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center border-2 border-indigo-400">
+                            <i class="fas fa-user-astronomer text-lg"></i>
+                        </div>
+                        <div>
+                            <span class="block font-bold" id="client-tarologo-name">Tarólogo</span>
+                            <div class="flex items-center gap-1.5">
+                                <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                                <span class="text-[10px] text-indigo-100 font-medium uppercase">Atendimento ao Vivo</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-indigo-700 px-4 py-2 rounded-lg text-center border border-indigo-500">
+                        <p class="text-[9px] text-indigo-200 uppercase font-bold leading-none mb-1">Seu Tempo</p>
+                        <div id="client-timer" class="text-xl font-mono font-bold tracking-tighter">00:00</div>
+                    </div>
+                </div>
+                
+                <!-- Client Controls -->
+                <div class="bg-gray-50 px-4 py-2 border-b flex justify-end">
+                    <button id="client-finish-btn" class="text-[10px] bg-red-100 hover:bg-red-200 text-red-600 font-bold py-1 px-3 rounded uppercase transition flex items-center gap-1">
+                        <i class="fas fa-stop"></i> Finalizar Consulta
+                    </button>
+                </div>
+                
+                <!-- Messages -->
+                <div id="client-messages" class="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-50 scroll-smooth">
+                    <!-- Messages injected by JS -->
+                    <div id="client-waiting-msg" class="bg-indigo-50 border border-indigo-200 p-6 rounded-xl text-indigo-800 text-center shadow-sm">
+                        <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                            <i class="fas fa-magic text-indigo-600 text-xl animate-pulse"></i>
+                        </div>
+                        <h6 class="font-bold text-lg mb-2">Quase lá!</h6>
+                        <p class="text-sm opacity-80 leading-relaxed">
+                            O tarólogo foi notificado e já está acessando a sala.<br>
+                            <span class="font-bold">Seu tempo só começará a contar quando o atendimento iniciar.</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Input -->
+                <form id="client-chat-form" class="p-4 bg-white border-t flex gap-2">
+                    <input type="text" id="client-chat-input" class="flex-1 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm" placeholder="Digite sua mensagem...">
+                    <button type="submit" class="bg-indigo-600 text-white w-12 h-12 rounded-xl flex items-center justify-center shadow-lg active:scale-95">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        // Supabase Configuration
+        const SUPABASE_URL = 'https://rtjgqfaphqkdbdzzytzw.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_ZxezFGN28TucGeZisbI7qQ_HcbU-CuA'; 
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Data Store (using Supabase)
+        const store = {
+            clients: [],
+            users: [],
+            consultations: [],
+            currentUser: null,
+            activeConsultation: null,
+            timerInterval: null,
+            clientTimerInterval: null,
+            currentView: 'admin-dashboard',
+            notificationSubscription: null
+        };
+
+        const notificationSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+
+        // Fetch Initial Data from Supabase
+        async function loadInitialData() {
+            try {
+                const { data: clients } = await supabaseClient.from('clients').select('*');
+                const { data: users } = await supabaseClient.from('users').select('*');
+                const { data: consultations } = await supabaseClient.from('consultations').select('*');
+                
+                store.clients = clients || [];
+                store.users = users || [];
+                store.consultations = consultations || [];
+                
+                updateEarningsDisplay();
+            } catch (err) {
+                console.error("Erro ao carregar dados:", err);
+            }
+        }
+
+        function updateEarningsDisplay() {
+            if (!store.currentUser || store.currentUser.role !== 'tarologo') return;
+            
+            const myFinishedConsults = store.consultations.filter(c => 
+                c.tarologo_id === store.currentUser.id && 
+                c.status === 'finished'
+            );
+            
+            // Valor total do minuto: R$ 2,00. Comissão do Tarólogo: 25% (R$ 0,50)
+            const totalMinutes = myFinishedConsults.reduce((acc, c) => acc + (c.minutes || 0), 0);
+            const earnings = totalMinutes * 0.50;
+            
+            const display = document.getElementById('sidebar-earnings');
+            if (display) display.textContent = `R$ ${earnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            
+            // Update Valleys/Metas if in that view
+            const totalComissionEl = document.getElementById('total-comissoes');
+            const totalReceberEl = document.getElementById('total-receber');
+            const mensalRealizadoEl = document.getElementById('mensal-realizado');
+            
+            if (totalComissionEl) totalComissionEl.textContent = `R$ ${earnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            if (totalReceberEl) totalReceberEl.textContent = `R$ ${earnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            if (mensalRealizadoEl) mensalRealizadoEl.textContent = `R$ ${earnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+        }
+
+        // Auth Logic
+        async function checkPersistedLogin() {
+            // Check if it's a client access first
+            const urlParams = new URLSearchParams(window.location.search);
+            const consultationId = urlParams.get('c');
+            
+            if (consultationId) {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('main-dashboard').classList.remove('hidden');
+                // Hide sidebar for clients
+                document.querySelector('.sidebar').classList.add('hidden');
+                document.querySelector('header').classList.add('hidden');
+                renderView('client-chat');
+                return;
+            }
+
+            const savedUser = localStorage.getItem('tarot_user');
+            if (savedUser) {
+                store.currentUser = JSON.parse(savedUser);
+                showDashboard();
+            }
+        }
+        checkPersistedLogin();
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
+            const submitBtn = e.target.querySelector('button');
+            
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Entrando...';
+
+            try {
+                // Query case-insensitive for username but exact for password
+                const { data: user, error } = await supabaseClient
+                    .from('users')
+                    .select('*')
+                    .ilike('username', username)
+                    .eq('password', password)
+                    .single();
+
+                if (error) {
+                    if (error.code === 'PGRST116') {
+                        alert('Usuário ou senha incorretos! Verifique se digitou corretamente.');
+                    } else {
+                        console.error("Erro no Login:", error);
+                        alert('Erro de conexão com o Banco: ' + error.message);
+                    }
+                    return;
+                }
+
+                if (user) {
+                    store.currentUser = user;
+                    localStorage.setItem('tarot_user', JSON.stringify(user));
+                    showDashboard();
+                }
+            } catch (err) {
+                alert('Erro inesperado: ' + err.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Entrar';
+            }
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            store.currentUser = null;
+            localStorage.removeItem('tarot_user');
+            if (store.timerInterval) clearInterval(store.timerInterval);
+            document.getElementById('main-dashboard').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+        });
+
+        async function showDashboard() {
+            await loadInitialData();
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('main-dashboard').classList.remove('hidden');
+            document.getElementById('current-user-name').textContent = store.currentUser.name;
+            document.getElementById('user-role-display').textContent = store.currentUser.role;
+
+            // Start Realtime Notification Monitor
+            startNotificationMonitor();
+
+            if (store.currentUser.role === 'admin') {
+                document.getElementById('admin-nav').classList.remove('hidden');
+                document.getElementById('tarologo-nav').classList.add('hidden');
+                renderView('admin-dashboard');
+            } else {
+                document.getElementById('admin-nav').classList.add('hidden');
+                document.getElementById('tarologo-nav').classList.remove('hidden');
+                renderView('tarologo-consultas');
+            }
+        }
+
+        function startNotificationMonitor() {
+            if (!store.currentUser) return;
+            if (store.notificationSubscription) supabaseClient.removeChannel(store.notificationSubscription);
+            
+            console.log("Iniciando monitor de notificações para o tarólogo:", store.currentUser.id);
+
+            // Monitor for NEW consultations assigned to THIS tarologist
+            store.notificationSubscription = supabaseClient
+                .channel('new_consultations_channel')
+                .on('postgres_changes', { 
+                    event: 'INSERT', 
+                    schema: 'public', 
+                    table: 'consultations',
+                    filter: `tarologo_id=eq.${store.currentUser.id}`
+                }, async (payload) => {
+                    console.log("NOVA CONSULTA RECEBIDA EM TEMPO REAL:", payload);
+                    
+                    if (payload.new.status === 'pending') {
+                        // Tentar tocar som
+                        notificationSound.currentTime = 0;
+                        notificationSound.play().then(() => {
+                            console.log("Som de notificação tocado!");
+                        }).catch(e => {
+                            console.warn("Som bloqueado pelo navegador. Clique na página uma vez para autorizar sons.", e);
+                        });
+                        
+                        // Notificação do navegador
+                        if (Notification.permission === "granted") {
+                            new Notification("Nova Consulta!", { 
+                                body: "Você recebeu um atendimento de " + (payload.new.type === 'phone' ? 'Telefone' : 'Chat'),
+                                icon: 'https://cdn-icons-png.flaticon.com/512/107/107831.png'
+                            });
+                        }
+
+                        // Atualizar dados e interface
+                        await loadInitialData();
+                        if (store.currentView === 'tarologo-consultas') {
+                            renderView('tarologo-consultas');
+                        }
+                    }
+                })
+                .subscribe((status) => {
+                    console.log("Status da conexão Realtime:", status);
+                });
+            
+            // Ask for notification permission
+            if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+                Notification.requestPermission();
+            }
+        }
+
+        // Navigation
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const view = link.getAttribute('data-view');
+                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active', 'bg-indigo-800'));
+                link.classList.add('active', 'bg-indigo-800');
+                renderView(view);
+            });
+        });
+
+        async function renderView(viewId) {
+            store.currentView = viewId;
+            const template = document.getElementById(`view-${viewId}`);
+            const content = document.getElementById('view-content');
+            const viewTitle = document.getElementById('view-title');
+            
+            content.innerHTML = '';
+            content.appendChild(template.content.cloneNode(true));
+
+            const titles = {
+                'admin-dashboard': 'Resumo do Sistema',
+                'admin-clients': 'Gerenciar Clientes',
+                'admin-tarologos': 'Gerenciar Tarólogos',
+                'tarologo-consultas': 'Minha Lista de Consultas',
+                'tarologo-chat': 'Sala de Atendimento',
+                'client-chat': 'Seu Atendimento'
+            };
+            viewTitle.textContent = titles[viewId] || 'Dashboard';
+
+            if (viewId === 'admin-dashboard') initAdminDashboard();
+            if (viewId === 'admin-clients') initAdminClients();
+            if (viewId === 'admin-tarologos') initAdminTarologos();
+            if (viewId === 'tarologo-consultas') initTarologoConsultas();
+            if (viewId === 'tarologo-chat') initTarologoChat();
+            if (viewId === 'client-chat') initClientChat();
+        }
+
+        async function initClientChat() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const consultId = urlParams.get('c');
+            
+            if (!consultId) {
+                alert("Consulta não encontrada.");
+                window.location.href = window.location.pathname;
+                return;
+            }
+
+            // Load consultation data
+            const { data: consult, error } = await supabaseClient
+                .from('consultations')
+                .select('*, clients(*), users(*)')
+                .eq('id', consultId)
+                .single();
+
+            if (error || !consult) {
+                document.getElementById('client-loading').innerHTML = `<p class="text-red-500 font-bold">Erro: Atendimento não encontrado ou já finalizado.</p>`;
+                return;
+            }
+
+            if (consult.status === 'finished') {
+                document.getElementById('client-loading').innerHTML = `<p class="text-indigo-600 font-bold">Este atendimento já foi finalizado. Obrigado!</p>`;
+                return;
+            }
+
+            document.getElementById('client-loading').classList.add('hidden');
+            document.getElementById('client-chat-section').classList.remove('hidden');
+            
+            document.getElementById('client-tarologo-name').textContent = consult.users ? consult.users.name : 'Tarólogo';
+            
+            // Setup Timer
+            const updateClientTimer = () => {
+                const mins = Math.floor(consult.remaining_seconds / 60);
+                const secs = consult.remaining_seconds % 60;
+                document.getElementById('client-timer').textContent = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+                
+                // GERENCIAMENTO DA MENSAGEM DE ESPERA
+                const waitingMsg = document.getElementById('client-waiting-msg');
+                if (waitingMsg) {
+                    if (consult.status === 'active') {
+                        waitingMsg.remove(); // Remove do DOM para não voltar mais
+                    } else {
+                        waitingMsg.style.display = 'block';
+                    }
+                }
+            };
+            updateClientTimer();
+
+            // Real-time Update for Timer and Status
+            const clientConsultSub = supabaseClient
+                .channel(`status_monitor_${consultId}`)
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'consultations', filter: `id=eq.${consultId}` }, payload => {
+                    console.log("SYNC DO BANCO (CLIENTE):", payload.new);
+                    
+                    const oldStatus = consult.status;
+                    const newStatus = payload.new.status;
+                    const dbSeconds = payload.new.remaining_seconds;
+                    
+                    // Notifica entrada do tarólogo se o status mudar para active
+                    if (oldStatus !== 'active' && newStatus === 'active') {
+                        addClientMessageToUI({
+                            sender_name: 'SISTEMA',
+                            text: '🌟 O tarólogo entrou na sala! Seu atendimento começou agora.',
+                            created_at: new Date().toISOString()
+                        }, 'system');
+                    }
+
+                    // ATUALIZAÇÃO DO CRONÔMETRO (INTELIGENTE)
+                    consult.status = newStatus;
+                    
+                    // Só sobrescreve o tempo local se o status mudou ou se a diferença for absurda (> 30s)
+                    // Isso garante que o contador local de 1 em 1s seja o soberano na tela do cliente
+                    if (oldStatus !== newStatus || Math.abs(consult.remaining_seconds - dbSeconds) > 30) {
+                        consult.remaining_seconds = dbSeconds;
+                    }
+                    
+                    updateClientTimer();
+                    
+                    if (consult.status === 'finished') {
+                        if (store.clientTimerInterval) clearInterval(store.clientTimerInterval);
+                        alert("O atendimento foi encerrado. Obrigado!");
+                        location.reload();
+                    }
+                })
+                .subscribe((status) => {
+                    console.log("Realtime Status Monitor (Cliente):", status);
+                });
+
+            // Cronômetro Local do Cliente (para o tempo descer de 1 em 1 segundo de forma fluida)
+            if (store.clientTimerInterval) clearInterval(store.clientTimerInterval);
+            store.clientTimerInterval = setInterval(() => {
+                // SÓ conta se o status for 'active'
+                if (consult.status === 'active' && consult.remaining_seconds > 0) {
+                    consult.remaining_seconds--;
+                    console.log("CONTAGEM LOCAL CLIENTE:", consult.remaining_seconds);
+                    updateClientTimer();
+                } else {
+                    // Se não estiver ativo, garante que o timer reflita o valor atual
+                    updateClientTimer();
+                }
+            }, 1000);
+
+            // Chat History
+            const chatBox = document.getElementById('client-messages');
+            const loadClientMessages = async () => {
+                const { data: messages } = await supabaseClient.from('messages').select('*').eq('consultation_id', consultId).order('created_at', { ascending: true });
+                chatBox.innerHTML = '';
+                
+                // Reaplica a mensagem de espera se necessário
+                const waitingMsg = document.createElement('div');
+                waitingMsg.id = 'client-waiting-msg';
+                waitingMsg.className = 'bg-indigo-50 border border-indigo-200 p-6 rounded-xl text-indigo-800 text-center shadow-sm';
+                waitingMsg.innerHTML = `
+                    <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                        <i class="fas fa-magic text-indigo-600 text-xl animate-pulse"></i>
+                    </div>
+                    <h6 class="font-bold text-lg mb-2">Quase lá!</h6>
+                    <p class="text-sm opacity-80 leading-relaxed">
+                        O tarólogo foi notificado e já está acessando a sala.<br>
+                        <span class="font-bold">Seu tempo só começará a contar quando o atendimento iniciar.</span>
+                    </p>
+                `;
+                chatBox.appendChild(waitingMsg);
+                
+                messages?.forEach(msg => addClientMessageToUI(msg, consult.client_id));
+                updateClientTimer(); // Atualiza visibilidade após carregar mensagens
+            };
+            await loadClientMessages();
+
+            // Real-time Chat
+            const clientChatSub = supabaseClient
+                .channel(`chat_messages_${consultId}`)
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `consultation_id=eq.${consultId}` }, payload => {
+                    console.log("NOVA MENSAGEM (CLIENTE RECEBENDO):", payload.new);
+                    addClientMessageToUI(payload.new, consult.client_id);
+                })
+                .subscribe((status) => {
+                    console.log("Realtime Chat Status (Cliente):", status);
+                });
+
+            // Finish Button for Client
+            document.getElementById('client-finish-btn').onclick = async () => {
+                if (confirm('Deseja realmente encerrar a consulta agora?')) {
+                    supabaseClient.removeChannel(clientConsultSub);
+                    supabaseClient.removeChannel(clientChatSub);
+                    
+                    // Lógica de finalização (igual à do tarólogo para devolver minutos)
+                    const remainingSeconds = consult.remaining_seconds;
+                    const remainingMinutes = Math.floor(remainingSeconds / 60);
+                    const usedMinutes = consult.minutes - remainingMinutes;
+
+                    try {
+                        if (remainingMinutes > 0) {
+                            const { data: cData } = await supabaseClient.from('clients').select('balance').eq('id', consult.client_id).single();
+                            if (cData) {
+                                await supabaseClient.from('clients').update({ balance: cData.balance + remainingMinutes }).eq('id', consult.client_id);
+                            }
+                        }
+                        await supabaseClient.from('consultations').update({ 
+                            status: 'finished', 
+                            remaining_seconds: 0,
+                            minutes: usedMinutes > 0 ? usedMinutes : 0
+                        }).eq('id', consultId);
+                        
+                        alert("Consulta finalizada com sucesso.");
+                        location.reload();
+                    } catch (err) {
+                        console.error(err);
+                    }
+                }
+            };
+
+            // Send Message
+            document.getElementById('client-chat-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const input = document.getElementById('client-chat-input');
+                const text = input.value.trim();
+                if (!text) return;
+                
+                input.value = '';
+                
+                // Validação dos dados do cliente para evitar erro
+                const clientName = (consult.clients && consult.clients.name) ? consult.clients.name : 'Cliente';
+                const clientId = consult.client_id;
+                
+                console.log("CLIENTE TENTANDO ENVIAR MENSAGEM:", { text, clientId, clientName });
+
+                try {
+                    const { error: insertError } = await supabaseClient.from('messages').insert([{
+                        consultation_id: consultId,
+                        sender_id: clientId,
+                        sender_name: clientName,
+                        text: text
+                    }]);
+
+                    if (insertError) {
+                        console.error("ERRO AO INSERIR MENSAGEM DO CLIENTE:", insertError);
+                        alert("Erro ao enviar mensagem: " + insertError.message);
+                    } else {
+                        console.log("MENSAGEM DO CLIENTE ENVIADA COM SUCESSO!");
+                    }
+                } catch (err) {
+                    console.error("ERRO INESPERADO NO ENVIO DO CLIENTE:", err);
+                    alert("Erro inesperado no envio.");
+                }
+            };
+        }
+
+        function addClientMessageToUI(msg, clientId) {
+            const chatBox = document.getElementById('client-messages');
+            
+            if (clientId === 'system') {
+                const sysDiv = document.createElement('div');
+                sysDiv.className = 'w-full flex justify-center my-4';
+                sysDiv.innerHTML = `<div class="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full text-xs font-bold border border-indigo-100 shadow-sm">${msg.text}</div>`;
+                chatBox.appendChild(sysDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+                return;
+            }
+
+            const isMe = msg.sender_id === clientId;
+            
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex ${isMe ? 'justify-end' : 'justify-start'}`;
+            msgDiv.innerHTML = `
+                <div class="max-w-[85%] ${isMe ? 'bg-indigo-600 text-white rounded-l-xl rounded-tr-xl' : 'bg-white text-gray-800 border border-gray-100 rounded-r-xl rounded-tl-xl'} p-3 shadow-sm">
+                    <p class="text-[9px] ${isMe ? 'text-indigo-200' : 'text-gray-400'} font-bold uppercase mb-1">${msg.sender_name}</p>
+                    <p class="text-sm leading-relaxed">${msg.text}</p>
+                </div>
+            `;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Admin Views
+        function initAdminDashboard() {
+            document.getElementById('stat-total-clients').textContent = store.clients.length;
+            document.getElementById('stat-today-consults').textContent = store.consultations.length;
+            document.getElementById('stat-online-tarologos').textContent = store.users.filter(u => u.role === 'tarologo').length;
+
+            const table = document.getElementById('admin-consultations-table');
+            table.innerHTML = store.consultations.map(c => {
+                const client = store.clients.find(cl => cl.id === c.client_id);
+                const tarologo = store.users.find(u => u.id === c.tarologo_id);
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 font-mono text-sm">#${c.id.substring(0,8)}</td>
+                        <td class="px-6 py-4 font-medium">${client ? client.name : 'N/A'}</td>
+                        <td class="px-6 py-4">${c.minutes} min</td>
+                        <td class="px-6 py-4 font-medium text-purple-700">${tarologo ? tarologo.name : 'Não atribuído'}</td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 py-1 rounded-full text-xs font-bold ${c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}">
+                                ${c.status === 'pending' ? 'Aguardando' : 'Finalizada'}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <button onclick="copyClientLink('${c.id}')" class="text-indigo-600 hover:text-indigo-800 mr-3" title="Copiar Link do Cliente"><i class="fas fa-link"></i></button>
+                            <button onclick="deleteConsultation('${c.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function initAdminClients() {
+            const table = document.getElementById('admin-clients-table');
+            table.innerHTML = store.clients.map(c => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 font-medium">${c.name}</td>
+                    <td class="px-6 py-4 text-sm">${c.cpf || '-'}</td>
+                    <td class="px-6 py-4 text-sm">
+                        <div class="text-gray-900">${c.email || '-'}</div>
+                        <div class="text-gray-500">${c.phone || '-'}</div>
+                    </td>
+                    <td class="px-6 py-4 font-bold text-blue-600">${c.balance || 0} min</td>
+                    <td class="px-6 py-4 flex gap-3">
+                        <button onclick="openAddMinutesModal('${c.id}')" class="text-green-600 hover:text-green-800" title="Adicionar Tempo"><i class="fas fa-plus-circle"></i></button>
+                        <button onclick="deleteClient('${c.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function initAdminTarologos() {
+            const table = document.getElementById('admin-tarologos-table');
+            table.innerHTML = store.users.filter(u => u.role === 'tarologo').map(u => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 font-medium">${u.name}</td>
+                    <td class="px-6 py-4 text-sm">${u.username}</td>
+                    <td class="px-6 py-4">
+                        <span class="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-bold uppercase">Tarólogo</span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <button onclick="deleteTarologo('${u.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Modals
+        function openModal(title, bodyHtml) {
+            document.getElementById('modal-body').innerHTML = `<h3 class="text-2xl font-bold text-indigo-900 mb-6">${title}</h3>${bodyHtml}`;
+            document.getElementById('modal-container').classList.remove('hidden');
+        }
+        function closeModal() { document.getElementById('modal-container').classList.add('hidden'); }
+
+        function openNewClientModal() {
+            openModal('Cadastrar Novo Cliente', `
+                <form id="new-client-form" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="col-span-2"><label class="block text-sm font-medium mb-1">Nome Completo</label><input type="text" id="client-name" class="w-full border p-2 rounded" required></div>
+                        <div><label class="block text-sm font-medium mb-1">Data de Nascimento</label><input type="date" id="client-birth" class="w-full border p-2 rounded"></div>
+                        <div><label class="block text-sm font-medium mb-1">CPF</label><input type="text" id="client-cpf" class="w-full border p-2 rounded"></div>
+                        <div><label class="block text-sm font-medium mb-1">E-mail</label><input type="email" id="client-email" class="w-full border p-2 rounded"></div>
+                        <div><label class="block text-sm font-medium mb-1">Telefone</label><input type="text" id="client-phone" class="w-full border p-2 rounded"></div>
+                    </div>
+                    <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 rounded mt-4">Salvar Cadastro</button>
+                </form>
+            `);
+            document.getElementById('new-client-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const client = {
+                    name: document.getElementById('client-name').value,
+                    birth: document.getElementById('client-birth').value || null,
+                    cpf: document.getElementById('client-cpf').value || null,
+                    email: document.getElementById('client-email').value || null,
+                    phone: document.getElementById('client-phone').value || null,
+                    balance: 0
+                };
+                await supabaseClient.from('clients').insert([client]);
+                closeModal();
+                showDashboard();
+            };
+        }
+
+        function openAddMinutesModal(clientId) {
+            const client = store.clients.find(c => c.id === clientId);
+            openModal(`Adicionar Tempo: ${client.name}`, `
+                <form id="add-minutes-form" class="space-y-4">
+                    <div><label class="block text-sm font-medium mb-1">Quantidade de Minutos</label><input type="number" id="minutes-amount" class="w-full border p-2 rounded" required min="1"></div>
+                    <button type="submit" class="w-full bg-green-600 text-white font-bold py-3 rounded">Confirmar Crédito</button>
+                </form>
+            `);
+            document.getElementById('add-minutes-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const mins = parseInt(document.getElementById('minutes-amount').value);
+                await supabaseClient.from('clients').update({ balance: (client.balance || 0) + mins }).eq('id', clientId);
+                closeModal();
+                showDashboard();
+            };
+        }
+
+        function openNewConsultationModal() {
+            const clientOptions = store.clients.filter(c => c.balance > 0).map(c => `<option value="${c.id}">${c.name} (${c.balance} min)</option>`).join('');
+            const tarologoOptions = store.users.filter(u => u.role === 'tarologo').map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+            openModal('Nova Consulta', `
+                <form id="new-consultation-form" class="space-y-4">
+                    <div><label class="block text-sm font-medium mb-1">Selecionar Cliente</label><select id="select-client" class="w-full border p-2 rounded" required>${clientOptions}</select></div>
+                    <div><label class="block text-sm font-medium mb-1">Minutos</label><input type="number" id="consult-minutes" class="w-full border p-2 rounded" required min="1"></div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Tipo de Consulta</label>
+                        <select id="consult-type" class="w-full border p-2 rounded" required>
+                            <option value="chat">💬 Chat</option>
+                            <option value="phone">📞 Telefone</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium mb-1">Atribuir Tarólogo</label><select id="select-tarologo" class="w-full border p-2 rounded" required>${tarologoOptions}</select></div>
+                    <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 rounded">Lançar</button>
+                </form>
+            `);
+            document.getElementById('new-consultation-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const cid = document.getElementById('select-client').value;
+                const tid = document.getElementById('select-tarologo').value;
+                const mins = parseInt(document.getElementById('consult-minutes').value);
+                const type = document.getElementById('consult-type').value;
+                const client = store.clients.find(c => c.id === cid);
+                await supabaseClient.from('consultations').insert([{ 
+                    client_id: cid, 
+                    tarologo_id: tid, 
+                    minutes: mins, 
+                    remaining_seconds: mins * 60, 
+                    status: 'pending',
+                    type: type 
+                }]);
+                await supabaseClient.from('clients').update({ balance: client.balance - mins }).eq('id', cid);
+                closeModal();
+                showDashboard();
+            };
+        }
+
+        function openNewTarologoModal() {
+            openModal('Cadastrar Novo Tarólogo', `
+                <form id="new-tarologo-form" class="space-y-4">
+                    <div><label class="block text-sm font-medium mb-1">Nome</label><input type="text" id="t-name" class="w-full border p-2 rounded" required placeholder="Nome completo"></div>
+                    <div><label class="block text-sm font-medium mb-1">Usuário</label><input type="text" id="t-user" class="w-full border p-2 rounded" required placeholder="Ex: joao_tarot"></div>
+                    <div><label class="block text-sm font-medium mb-1">Senha</label><input type="password" id="t-pass" class="w-full border p-2 rounded" required placeholder="Mínimo 4 caracteres"></div>
+                    <button type="submit" id="save-tarologo-btn" class="w-full bg-blue-600 text-white font-bold py-3 rounded">Criar Acesso</button>
+                </form>
+            `);
+            document.getElementById('new-tarologo-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const btn = document.getElementById('save-tarologo-btn');
+                const tName = document.getElementById('t-name').value.trim();
+                const tUser = document.getElementById('t-user').value.trim();
+                const tPass = document.getElementById('t-pass').value.trim();
+
+                btn.disabled = true;
+                btn.textContent = 'Salvando...';
+
+                try {
+                    const { error } = await supabaseClient.from('users').insert([{ 
+                        name: tName, 
+                        username: tUser, 
+                        password: tPass, 
+                        role: 'tarologo' 
+                    }]);
+
+                    if (error) {
+                        alert('Erro ao criar tarólogo: ' + error.message);
+                        console.error(error);
+                    } else {
+                        alert('Tarólogo criado com sucesso!');
+                        closeModal();
+                        showDashboard();
+                    }
+                } catch (err) {
+                    alert('Erro inesperado: ' + err.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Criar Acesso';
+                }
+            };
+        }
+
+        async function deleteClient(id) { if(confirm('Excluir cliente?')) { await supabaseClient.from('clients').delete().eq('id', id); showDashboard(); } }
+        async function deleteTarologo(id) { if(confirm('Excluir tarólogo?')) { await supabaseClient.from('users').delete().eq('id', id); showDashboard(); } }
+        async function deleteConsultation(id) { if(confirm('Remover consulta?')) { await supabaseClient.from('consultations').delete().eq('id', id); showDashboard(); } }
+
+        function copyClientLink(consultationId) {
+            const url = `${window.location.origin}${window.location.pathname}?c=${consultationId}`;
+            navigator.clipboard.writeText(url).then(() => {
+                alert("Link de acesso do cliente copiado!\n\nEnvie este link para o cliente entrar no chat.");
+            }).catch(err => {
+                console.error('Erro ao copiar link:', err);
+                alert("Link: " + url); // Fallback
+            });
+        }
+
+        // Tarólogo logic
+        function initTarologoConsultas() {
+            const table = document.getElementById('tarologo-assigned-consultations');
+            // Show both 'pending' (new) and 'active' (in progress) consultations
+            const myConsults = store.consultations.filter(c => 
+                c.tarologo_id === store.currentUser.id && 
+                (c.status === 'pending' || c.status === 'active')
+            );
+            
+            table.innerHTML = myConsults.map(c => {
+                const client = store.clients.find(cl => cl.id === c.client_id);
+                // Comissão do Tarólogo: R$ 0,50 por minuto (25% de R$ 2,00)
+                const credits = (c.minutes || 0) * 0.50;
+                const typeIcon = c.type === 'phone' ? '📞 Telefone' : '💬 Chat';
+                const statusBadge = c.status === 'active' 
+                    ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold uppercase ml-2">Em curso</span>' 
+                    : '';
+                
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 font-bold text-gray-700">${client ? client.name : 'N/A'}${statusBadge}</td>
+                        <td class="px-6 py-4 font-bold text-green-600">R$ ${credits.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td class="px-6 py-4 font-mono">
+                            <span class="bg-gray-100 px-2 py-1 rounded text-gray-600">${Math.floor(c.remaining_seconds/60)}:${(c.remaining_seconds%60).toString().padStart(2,'0')}</span>
+                        </td>
+                        <td class="px-6 py-4 text-xs font-bold uppercase text-gray-400">${typeIcon}</td>
+                        <td class="px-6 py-4 text-center flex gap-2 justify-center">
+                            <button onclick="copyClientLink('${c.id}')" class="bg-gray-100 hover:bg-gray-200 text-indigo-600 p-2 rounded-lg transition" title="Copiar Link do Cliente"><i class="fas fa-link"></i></button>
+                            <button onclick="startConsultation('${c.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition text-sm">
+                                ${c.status === 'active' ? 'Retomar' : 'Iniciar'}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function startConsultation(id) {
+            const consult = store.consultations.find(c => c.id === id);
+            store.activeConsultation = consult;
+            
+            // Switch navigation highlighting
+            document.querySelectorAll('.nav-link').forEach(l => {
+                l.classList.remove('active', 'bg-indigo-800');
+                if(l.getAttribute('data-view') === 'tarologo-chat') l.classList.add('active', 'bg-indigo-800');
+            });
+
+            renderView('tarologo-chat');
+        }
+
+        async function initTarologoChat() {
+            if (!store.activeConsultation) {
+                document.getElementById('no-active-consult').classList.remove('hidden');
+                document.getElementById('active-consultation-section').classList.add('hidden');
+                return;
+            }
+
+            const consult = store.activeConsultation;
+            const client = store.clients.find(cl => cl.id === consult.client_id);
+            
+            document.getElementById('no-active-consult').classList.add('hidden');
+            document.getElementById('active-consultation-section').classList.remove('hidden');
+            
+            document.getElementById('active-client-name').textContent = client.name;
+            document.getElementById('active-consult-info').textContent = `Tempo total contratado: ${consult.minutes} min`;
+            document.getElementById('active-consult-type').textContent = consult.type === 'phone' ? '📞 Telefone' : '💬 Chat';
+            
+            // ATIVAÇÃO DA CONSULTA: Quando o tarólogo entra, o status muda para 'active' se estiver 'pending'
+            if (consult.status === 'pending') {
+                consult.status = 'active';
+                await supabaseClient.from('consultations').update({ status: 'active' }).eq('id', consult.id);
+            }
+
+            updateTimerDisplay();
+            loadMessages(consult.id);
+            
+            // 1. Real-time Chat
+            const messageSubscription = supabaseClient
+                .channel(`chat_messages_${consult.id}`)
+                .on('postgres_changes', { 
+                    event: 'INSERT', 
+                    schema: 'public', 
+                    table: 'messages', 
+                    filter: `consultation_id=eq.${consult.id}` 
+                }, payload => {
+                    console.log("NOVA MENSAGEM (TARÓLOGO):", payload.new);
+                    addMessageToUI(payload.new);
+                })
+                .subscribe((status) => {
+                    console.log("Realtime Chat Status (Tarólogo):", status);
+                });
+
+            // 2. Real-time Status Monitor (if client finishes)
+            const statusSubscription = supabaseClient
+                .channel(`status_monitor_${consult.id}`)
+                .on('postgres_changes', { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'consultations', 
+                    filter: `id=eq.${consult.id}` 
+                }, payload => {
+                    console.log("CONSULTA ATUALIZADA (STATUS):", payload.new.status);
+                    if (payload.new.status === 'finished' && store.activeConsultation) {
+                        finishConsultation('O cliente encerrou o atendimento ou o tempo acabou.');
+                    }
+                })
+                .subscribe((status) => {
+                    console.log("Realtime Status Monitor (Tarólogo):", status);
+                });
+
+            if (store.timerInterval) clearInterval(store.timerInterval);
+            store.timerInterval = setInterval(async () => {
+                // O cronômetro do tarólogo SÓ corre se o status for 'active'
+                if (consult.status === 'active' && consult.remaining_seconds > 0) {
+                    consult.remaining_seconds--;
+                    updateTimerDisplay();
+                    
+                    // Sincroniza com o Banco de Dados a cada 2 segundos para o cliente ver com precisão
+                    if (consult.remaining_seconds % 2 === 0) {
+                         await supabaseClient.from('consultations').update({ remaining_seconds: consult.remaining_seconds }).eq('id', consult.id);
+                    }
+                    
+                    if (consult.remaining_seconds === 60) {
+                        alert('⚠️ AVISO: Falta apenas 1 minuto para encerrar a consulta!');
+                    }
+                } else if (consult.remaining_seconds <= 0) {
+                    finishConsultation('Tempo esgotado! A consulta foi encerrada automaticamente.');
+                }
+            }, 1000);
+
+            document.getElementById('chat-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const input = document.getElementById('chat-input');
+                const text = input.value.trim();
+                if (!text) return;
+                
+                input.value = '';
+                await supabaseClient.from('messages').insert([{
+                    consultation_id: consult.id,
+                    sender_id: store.currentUser.id,
+                    sender_name: store.currentUser.name,
+                    text: text
+                }]);
+            };
+
+            document.getElementById('finish-consult-btn').onclick = () => {
+                if(confirm('Tem certeza que deseja encerrar este atendimento agora?')) {
+                    supabaseClient.removeChannel(messageSubscription);
+                    supabaseClient.removeChannel(statusSubscription);
+                    finishConsultation('Atendimento finalizado pelo tarólogo.');
+                }
+            };
+            
+            document.getElementById('pause-consult-btn').onclick = () => { 
+                clearInterval(store.timerInterval); 
+                alert('Atendimento pausado. O tempo parou de contar.'); 
+            };
+        }
+
+        async function loadMessages(consultationId) {
+            const chatBox = document.getElementById('chat-messages');
+            chatBox.innerHTML = '<div class="text-center text-xs text-gray-400 italic my-4">Carregando histórico...</div>';
+            
+            const { data: messages, error } = await supabaseClient
+                .from('messages')
+                .select('*')
+                .eq('consultation_id', consultationId)
+                .order('created_at', { ascending: true });
+                
+            if (error) {
+                chatBox.innerHTML = '<div class="text-center text-red-400 text-xs">Erro ao carregar mensagens.</div>';
+                return;
+            }
+            
+            chatBox.innerHTML = messages.length ? '' : '<div class="text-center text-xs text-gray-400 italic my-4">Nenhuma mensagem ainda.</div>';
+            messages.forEach(msg => addMessageToUI(msg));
+        }
+
+        function addMessageToUI(msg) {
+            const chatBox = document.getElementById('chat-messages');
+            const isMe = msg.sender_id === store.currentUser.id;
+            
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex ${isMe ? 'justify-end' : 'justify-start'}`;
+            msgDiv.innerHTML = `
+                <div class="max-w-[80%] ${isMe ? 'bg-blue-600 text-white rounded-l-lg rounded-tr-lg' : 'bg-white text-gray-800 border border-gray-200 rounded-r-lg rounded-tl-lg'} p-3 shadow-sm">
+                    <p class="text-[10px] ${isMe ? 'text-blue-100' : 'text-gray-400'} font-bold uppercase mb-1">${msg.sender_name}</p>
+                    <p class="text-sm">${msg.text}</p>
+                    <p class="text-[9px] ${isMe ? 'text-blue-200' : 'text-gray-400'} text-right mt-1">${new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                </div>
+            `;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(store.activeConsultation.remaining_seconds / 60);
+            const secs = store.activeConsultation.remaining_seconds % 60;
+            const timeStr = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+            
+            const mainEl = document.getElementById('consultation-timer');
+            const miniEl = document.getElementById('mini-timer');
+            
+            if (mainEl) mainEl.textContent = timeStr;
+            if (miniEl) miniEl.textContent = timeStr;
+        }
+
+        async function finishConsultation(msg) {
+            clearInterval(store.timerInterval);
+            
+            const consult = store.activeConsultation;
+            const remainingSeconds = consult.remaining_seconds;
+            const remainingMinutes = Math.floor(remainingSeconds / 60); // Arredonda para baixo os minutos restantes
+            const totalMinutesOriginal = consult.minutes;
+            const usedMinutes = totalMinutesOriginal - remainingMinutes;
+
+            try {
+                // 1. Devolver os minutos restantes para o saldo do cliente
+                if (remainingMinutes > 0) {
+                    const { data: client, error: clientError } = await supabaseClient
+                        .from('clients')
+                        .select('balance')
+                        .eq('id', consult.client_id)
+                        .single();
+                    
+                    if (!clientError && client) {
+                        const newBalance = (client.balance || 0) + remainingMinutes;
+                        await supabaseClient.from('clients').update({ balance: newBalance }).eq('id', consult.client_id);
+                    }
+                }
+
+                // 2. Finalizar a consulta e atualizar o tempo real utilizado (para ganhos do tarólogo)
+                // Garantimos que o tempo usado seja no mínimo 0
+                const finalUsedMinutes = usedMinutes > 0 ? usedMinutes : 0;
+                
+                await supabaseClient.from('consultations').update({ 
+                    status: 'finished', 
+                    remaining_seconds: 0,
+                    minutes: finalUsedMinutes // Atualiza para o tempo real usado
+                }).eq('id', consult.id);
+
+                alert(`${msg}\n\nTempo restante (${remainingMinutes} min) devolvido ao cliente.`);
+            } catch (err) {
+                console.error("Erro ao finalizar consulta:", err);
+                alert("Erro ao salvar finalização da consulta.");
+            }
+            
+            store.activeConsultation = null;
+            showDashboard();
+        }
+    </script>
+</body>
+</html>
