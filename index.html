@@ -1780,10 +1780,9 @@
             if (!consult) return;
 
             try {
-                // Ativa a consulta no banco com o horário de início
+                // Removemos qualquer coluna extra para evitar erros de cache do Supabase
                 const { error } = await supabaseClient.from('consultas').update({ 
-                    status: 'active',
-                    started_at: new Date().toISOString()
+                    status: 'active'
                 }).eq('id', id);
                 
                 if (error) throw error;
@@ -2100,8 +2099,7 @@
                 await supabaseClient.from('consultas').update({ 
                     status: 'finished', 
                     remaining_seconds: 0,
-                    minutes: finalUsedMinutes,
-                    ended_at: new Date().toISOString()
+                    minutes: finalUsedMinutes
                 }).eq('id', consult.id);
 
                 alert(`${msg}\n\nTempo restante (${remainingMinutes} min) devolvido ao cliente.`);
