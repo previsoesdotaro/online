@@ -1431,8 +1431,11 @@
                         <td class="px-6 py-4">${c.minutes} min</td>
                         <td class="px-6 py-4 font-medium text-purple-700">${tarologo ? tarologo.name : 'Não atribuído'}</td>
                         <td class="px-6 py-4">
-                            <span class="px-2 py-1 rounded-full text-xs font-bold ${c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}">
-                                ${c.status === 'pending' ? 'Aguardando' : (c.status === 'active' ? 'Em Atendimento' : 'Finalizada')}
+                            <span class="px-2 py-1 rounded-full text-xs font-bold ${
+                                c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 
+                                c.status === 'active' ? 'bg-green-100 text-green-700' : 
+                                c.status === 'paused' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700'}">
+                                ${c.status === 'pending' ? 'Aguardando' : (c.status === 'active' ? 'Em Atendimento' : (c.status === 'paused' ? 'Pausado' : 'Finalizada'))}
                             </span>
                         </td>
                         <td class="px-6 py-4">
@@ -1690,7 +1693,7 @@
 
             const myConsults = store.consultations.filter(c => c.tarologo_id === store.currentUser.id);
             const pendingConsults = myConsults.filter(c => c.status === 'pending');
-            const activeConsults = myConsults.filter(c => c.status === 'active');
+            const activeConsults = myConsults.filter(c => c.status === 'active' || c.status === 'paused');
 
             // 1. Renderizar Consultas Pendentes (Novas)
             tablePending.innerHTML = pendingConsults.map(c => {
@@ -1726,8 +1729,10 @@
                     const secs = c.remaining_seconds % 60;
                     const timerStr = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
 
+                    const isPaused = c.status === 'paused';
+
                     return `
-                        <tr class="hover:bg-blue-50/50">
+                        <tr class="hover:bg-blue-50/50 ${isPaused ? 'opacity-70 grayscale-[0.5]' : ''}">
                             <td class="px-4 py-3 font-mono text-gray-400">#${c.id.substring(0,6)}</td>
                             <td class="px-4 py-3 font-black text-gray-800 uppercase">${client ? client.name : 'N/A'}</td>
                             <td class="px-4 py-3 text-gray-500">HÁ ${iniciadoEm}</td>
@@ -1748,11 +1753,17 @@
                             </td>
                             <td class="px-4 py-3">
                                 <div class="flex items-center justify-center gap-2">
-                                    <div class="text-lg font-mono font-black text-gray-800 mr-2">${timerStr}</div>
-                                    <button onclick="pauseConsultationInTable('${c.id}')" class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 shadow-sm transition">
-                                        <i class="fas fa-pause"></i>
-                                    </button>
-                                    <button onclick="finishConsultationInTable('${c.id}')" class="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200 shadow-sm transition">
+                                    <div class="text-lg font-mono font-black ${isPaused ? 'text-orange-600 animate-pulse' : 'text-gray-800'} mr-2">${timerStr}</div>
+                                    ${isPaused ? `
+                                        <button onclick="resumeConsultationInTable('${c.id}')" class="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center hover:bg-green-200 shadow-sm transition" title="Retomar">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                    ` : `
+                                        <button onclick="pauseConsultationInTable('${c.id}')" class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 shadow-sm transition" title="Pausar">
+                                            <i class="fas fa-pause"></i>
+                                        </button>
+                                    `}
+                                    <button onclick="finishConsultationInTable('${c.id}')" class="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200 shadow-sm transition" title="Finalizar">
                                         <i class="fas fa-stop"></i>
                                     </button>
                                     ${c.type === 'chat' ? `
@@ -1802,11 +1813,42 @@
             }
         }
 
-        function pauseConsultationInTable(id) {
-            // No momento a pausa é apenas visual/local para o tarólogo não se perder, 
-            // mas o tempo no banco continua sincronizado a cada 2s.
-            // Para implementar pausa real, precisaríamos de um status 'paused' no banco.
-            alert("Atendimento pausado localmente.");
+        async function pauseConsultationInTable(id) {
+            try {
+                const { error } = await supabaseClient.from('consultas')
+                    .update({ status: 'paused' })
+                    .eq('id', id);
+                
+                if (error) throw error;
+                
+                // Update local state immediately
+                const consult = store.consultations.find(c => c.id === id);
+                if (consult) consult.status = 'paused';
+                
+                renderView('tarologo-consultas');
+            } catch (err) {
+                console.error("Erro ao pausar consulta:", err);
+                alert("Erro ao pausar atendimento: " + (err.message || "Erro desconhecido"));
+            }
+        }
+
+        async function resumeConsultationInTable(id) {
+            try {
+                const { error } = await supabaseClient.from('consultas')
+                    .update({ status: 'active' })
+                    .eq('id', id);
+                
+                if (error) throw error;
+                
+                // Update local state immediately
+                const consult = store.consultations.find(c => c.id === id);
+                if (consult) consult.status = 'active';
+                
+                renderView('tarologo-consultas');
+            } catch (err) {
+                console.error("Erro ao retomar consulta:", err);
+                alert("Erro ao retomar atendimento: " + (err.message || "Erro desconhecido"));
+            }
         }
 
         async function finishConsultationInTable(id) {
@@ -1822,13 +1864,16 @@
         function startGlobalTimer() {
             if (globalTimerInterval) return;
             globalTimerInterval = setInterval(async () => {
-                const activeConsults = store.consultations.filter(c => c.tarologo_id === store.currentUser.id && c.status === 'active');
+                const myConsults = store.consultations.filter(c => c.tarologo_id === store.currentUser.id);
+                const activeConsults = myConsults.filter(c => c.status === 'active');
+                const pausedConsults = myConsults.filter(c => c.status === 'paused');
                 
-                if (activeConsults.length === 0) {
+                if (activeConsults.length === 0 && pausedConsults.length === 0) {
                     stopGlobalTimer();
                     return;
                 }
 
+                // Apenas processa o tempo para as que estão 'active'
                 for (const consult of activeConsults) {
                     if (consult.remaining_seconds > 0) {
                         consult.remaining_seconds--;
@@ -1942,6 +1987,10 @@
                     filter: `id=eq.${consult.id}` 
                 }, payload => {
                     console.log("CONSULTA ATUALIZADA (STATUS):", payload.new.status);
+                    
+                    // Sincroniza status local para pausar/retomar cronômetro
+                    consult.status = payload.new.status;
+                    
                     if (payload.new.status === 'finished' && store.activeConsultation) {
                         finishConsultation('O cliente encerrou o atendimento ou o tempo acabou.');
                     }
