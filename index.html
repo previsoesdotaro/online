@@ -1413,11 +1413,57 @@
                             <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg transition-all active:scale-95 mt-2">
                                 SALVAR ALTERAÇÕES
                             </button>
+                            <div class="pt-4 mt-4 border-t border-gray-100">
+                                <button type="button" id="refund-payment-btn" class="w-full bg-red-50 text-red-600 font-bold py-2 rounded-lg border border-red-100 hover:bg-red-100 transition-all text-xs flex items-center justify-center gap-2">
+                                    <i class="fas fa-undo"></i> ESTORNAR PAGAMENTO (DEVOLVER CRÉDITOS)
+                                </button>
+                            </div>
                         </form>
                     </div>
                 </div>
             `;
             document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            // Lógica do botão de Estorno
+            document.getElementById('refund-payment-btn').onclick = async () => {
+                const client = store.clients.find(c => c.id === payment.client_id);
+                if (!confirm(`Deseja realmente ESTORNAR este pagamento?\n\nIsso removerá ${payment.credits_added} minutos do saldo de ${client?.name || 'N/A'} e apagará o registro do fluxo de caixa.`)) {
+                    return;
+                }
+
+                const btn = document.getElementById('refund-payment-btn');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processando Estorno...';
+
+                try {
+                    // 1. Remover créditos do saldo do cliente
+                    const newBalance = Math.max(0, (client.balance || 0) - payment.credits_added);
+                    const { error: clientError } = await supabaseClient
+                        .from('clients')
+                        .update({ balance: newBalance })
+                        .eq('id', payment.client_id);
+
+                    if (clientError) throw clientError;
+
+                    // 2. Apagar registro de pagamento
+                    const { error: paymentError } = await supabaseClient
+                        .from('pagamentos')
+                        .delete()
+                        .eq('id', paymentId);
+
+                    if (paymentError) throw paymentError;
+
+                    alert('Estorno realizado com sucesso! Os créditos foram removidos do cliente.');
+                    closePaymentModal();
+                    await loadInitialData();
+                    initAdminCashFlow();
+                } catch (err) {
+                    console.error("Erro ao estornar pagamento:", err);
+                    alert("Erro ao realizar estorno: " + (err.message || "Erro desconhecido."));
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-undo"></i> ESTORNAR PAGAMENTO (DEVOLVER CRÉDITOS)';
+                }
+            };
 
             document.getElementById('edit-payment-form').onsubmit = async (e) => {
                 e.preventDefault();
