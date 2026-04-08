@@ -190,6 +190,14 @@
                     </tbody>
                 </table>
             </div>
+            <!-- Paginação Admin -->
+            <div id="admin-consultations-pagination" class="p-4 bg-gray-50 border-t flex items-center justify-between">
+                <p class="text-[10px] text-gray-500 font-bold uppercase">Mostrando página <span id="admin-page-num">1</span></p>
+                <div class="flex gap-2">
+                    <button onclick="changeAdminPage(-1)" class="px-3 py-1 bg-white border rounded text-xs font-bold hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed" id="admin-prev-btn">Anterior</button>
+                    <button onclick="changeAdminPage(1)" class="px-3 py-1 bg-white border rounded text-xs font-bold hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed" id="admin-next-btn">Próximo</button>
+                </div>
+            </div>
         </div>
     </template>
 
@@ -433,6 +441,14 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- Paginação Tarólogo -->
+                <div id="tarologo-consultations-pagination" class="p-3 bg-gray-50 border-t flex items-center justify-between">
+                    <p class="text-[9px] text-gray-500 font-bold uppercase">Página <span id="tarologo-page-num">1</span></p>
+                    <div class="flex gap-2">
+                        <button onclick="changeTarologoPage(-1)" class="px-2 py-1 bg-white border rounded text-[10px] font-bold hover:bg-gray-100 disabled:opacity-50" id="tarologo-prev-btn">Anterior</button>
+                        <button onclick="changeTarologoPage(1)" class="px-2 py-1 bg-white border rounded text-[10px] font-bold hover:bg-gray-100 disabled:opacity-50" id="tarologo-next-btn">Próximo</button>
+                    </div>
+                </div>
             </div>
         </div>
     </template>
@@ -645,7 +661,9 @@
             timerInterval: null,
             clientTimerInterval: null,
             currentView: 'admin-dashboard',
-            notificationSubscription: null
+            notificationSubscription: null,
+            adminConsultationsPage: 1, // NOVO: Página atual para admin
+            tarologoConsultationsPage: 1 // NOVO: Página atual para tarólogo
         };
 
         const notificationSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -1901,10 +1919,35 @@
             const table = document.getElementById('admin-consultations-table');
             if (!table) return;
 
-            // Mostra todas as consultas ordenadas por data (mais recentes primeiro)
-            const allConsultations = [...store.consultations].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            // Filtra consultas APENAS do mês atual (conforme solicitado pelo usuário)
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
 
-            table.innerHTML = allConsultations.map(c => {
+            const monthlyConsultations = store.consultations.filter(c => {
+                const d = new Date(c.created_at);
+                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+            }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            // Paginação: 10 por página
+            const itemsPerPage = 10;
+            const totalPages = Math.ceil(monthlyConsultations.length / itemsPerPage);
+            
+            // Garante que a página atual seja válida
+            if (store.adminConsultationsPage > totalPages) store.adminConsultationsPage = Math.max(1, totalPages);
+            
+            const startIndex = (store.adminConsultationsPage - 1) * itemsPerPage;
+            const paginatedConsultations = monthlyConsultations.slice(startIndex, startIndex + itemsPerPage);
+
+            // Atualiza Controles de Paginação
+            const pageNumEl = document.getElementById('admin-page-num');
+            const prevBtn = document.getElementById('admin-prev-btn');
+            const nextBtn = document.getElementById('admin-next-btn');
+            if (pageNumEl) pageNumEl.textContent = `${store.adminConsultationsPage} de ${totalPages || 1}`;
+            if (prevBtn) prevBtn.disabled = store.adminConsultationsPage === 1;
+            if (nextBtn) nextBtn.disabled = store.adminConsultationsPage === totalPages || totalPages === 0;
+
+            table.innerHTML = paginatedConsultations.map(c => {
                 const client = store.clients.find(cl => cl.id === c.client_id);
                 const tarologo = store.users.find(u => u.id === c.tarologo_id);
                 // Lógica de cálculo de duração e comissão baseada na diferença de tempo
@@ -1965,7 +2008,17 @@
                         </td>
                     </tr>
                 `;
-            }).join('');
+            }).join('') || '<tr><td colspan="6" class="p-8 text-center text-gray-400 italic">Nenhum atendimento este mês.</td></tr>';
+        }
+
+        function changeAdminPage(delta) {
+            store.adminConsultationsPage += delta;
+            renderAdminConsultationsTable();
+        }
+
+        function changeTarologoPage(delta) {
+            store.tarologoConsultationsPage += delta;
+            initTarologoConsultas();
         }
 
         function openEditConsultationModal(consultationId) {
@@ -2404,12 +2457,36 @@
             // 3. Renderizar Últimas Consultas Realizadas
             const tableFinished = document.getElementById('tarologo-finished-consultations-table');
             if (tableFinished) {
-                const finishedConsults = myConsults
-                    .filter(c => c.status === 'finished')
-                    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // Mais recentes primeiro
-                    .slice(0, 5); // Mostrar apenas as últimas 5
+                // Filtra consultas do mês atual e finalizadas
+                const now = new Date();
+                const currentMonth = now.getMonth();
+                const currentYear = now.getFullYear();
 
-                tableFinished.innerHTML = finishedConsults.map(c => {
+                const monthlyFinishedConsults = myConsults
+                    .filter(c => {
+                        const d = new Date(c.created_at);
+                        return c.status === 'finished' && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                    })
+                    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+                // Paginação Tarólogo: 10 por página
+                const itemsPerPage = 10;
+                const totalPages = Math.ceil(monthlyFinishedConsults.length / itemsPerPage);
+                
+                if (store.tarologoConsultationsPage > totalPages) store.tarologoConsultationsPage = Math.max(1, totalPages);
+                
+                const startIndex = (store.tarologoConsultationsPage - 1) * itemsPerPage;
+                const paginatedFinished = monthlyFinishedConsults.slice(startIndex, startIndex + itemsPerPage);
+
+                // Atualiza Controles de Paginação Tarólogo
+                const pageNumEl = document.getElementById('tarologo-page-num');
+                const prevBtn = document.getElementById('tarologo-prev-btn');
+                const nextBtn = document.getElementById('tarologo-next-btn');
+                if (pageNumEl) pageNumEl.textContent = `${store.tarologoConsultationsPage} de ${totalPages || 1}`;
+                if (prevBtn) prevBtn.disabled = store.tarologoConsultationsPage === 1;
+                if (nextBtn) nextBtn.disabled = store.tarologoConsultationsPage === totalPages || totalPages === 0;
+
+                tableFinished.innerHTML = paginatedFinished.map(c => {
                     const client = store.clients.find(cl => cl.id === c.client_id);
                     
                     // Cálculo original: Diferença entre fim e início
@@ -2444,7 +2521,7 @@
                             <td class="px-4 py-3 text-center font-bold text-blue-600">R$ ${comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                         </tr>
                     `;
-                }).join('') || '<tr><td colspan="5" class="p-4 text-center text-gray-400 italic">Nenhum atendimento finalizado recentemente.</td></tr>';
+                }).join('') || '<tr><td colspan="5" class="p-4 text-center text-gray-400 italic">Nenhum atendimento este mês.</td></tr>';
             }
         }
 
