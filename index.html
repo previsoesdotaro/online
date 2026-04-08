@@ -88,6 +88,9 @@
                         <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3" data-view="admin-history">
                             <i class="fas fa-history"></i> Histórico
                         </a>
+                        <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3" data-view="admin-cashflow">
+                            <i class="fas fa-money-bill-wave"></i> Fluxo de Caixa
+                        </a>
                     </div>
                     <div id="tarologo-nav" class="hidden">
                         <a href="#" class="nav-link block py-3 px-6 hover:bg-indigo-800 flex items-center gap-3 active" data-view="tarologo-consultas">
@@ -266,6 +269,51 @@
                         <!-- Rows injected by JS -->
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </template>
+
+    <template id="view-admin-cashflow">
+        <div class="space-y-6">
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-600">
+                    <p class="text-xs text-gray-500 uppercase font-bold tracking-wider">Entrada Total (Mês)</p>
+                    <h4 class="text-3xl font-bold mt-1 text-green-600" id="cashflow-total-revenue">R$ 0,00</h4>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-red-600">
+                    <p class="text-xs text-gray-500 uppercase font-bold tracking-wider">Comissões Pagas (Mês)</p>
+                    <h4 class="text-3xl font-bold mt-1 text-red-600" id="cashflow-total-commissions">R$ 0,00</h4>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-sm border-l-4 border-indigo-600">
+                    <p class="text-xs text-gray-500 uppercase font-bold tracking-wider">Lucro Líquido (Mês)</p>
+                    <h4 class="text-3xl font-bold mt-1 text-indigo-600" id="cashflow-net-profit">R$ 0,00</h4>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-sm border border-blue-200">
+                <div class="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center">
+                    <h4 class="font-bold text-lg">Fluxo de Caixa / Pagamentos</h4>
+                    <button onclick="openNewPaymentModal()" class="bg-blue-500 hover:bg-blue-400 px-4 py-2 rounded text-sm font-medium transition flex items-center gap-2">
+                        <i class="fas fa-plus"></i> Lançar Pagamento
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
+                            <tr>
+                                <th class="px-6 py-4">DATA</th>
+                                <th class="px-6 py-4">CLIENTE</th>
+                                <th class="px-6 py-4">VALOR (R$)</th>
+                                <th class="px-6 py-4">CRÉDITOS (MIN)</th>
+                                <th class="px-6 py-4">FORMA DE PAGAMENTO</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-cashflow-table" class="divide-y">
+                            <!-- Rows injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </template>
@@ -615,6 +663,7 @@
             clients: [],
             users: [],
             consultations: [],
+            payments: [], // NOVO: Histórico de pagamentos
             currentUser: null,
             activeConsultation: null,
             timerInterval: null,
@@ -632,9 +681,19 @@
                 const { data: users } = await supabaseClient.from('users').select('*').order('name');
                 const { data: consultations } = await supabaseClient.from('consultas').select('*');
                 
+                // Tenta carregar pagamentos se a tabela existir
+                let payments = [];
+                try {
+                    const { data: pData, error: pError } = await supabaseClient.from('pagamentos').select('*').order('created_at', { ascending: false });
+                    if (!pError) payments = pData || [];
+                } catch (e) {
+                    console.warn("Tabela 'pagamentos' não encontrada ou erro ao carregar. Criando fluxo local.", e);
+                }
+
                 store.clients = clients || [];
                 store.users = users || [];
                 store.consultations = consultations || [];
+                store.payments = payments;
                 
                 // Refresh currentUser data from DB (Status and Goals)
                 if (store.currentUser) {
@@ -1116,6 +1175,7 @@
                 'admin-clients': 'Gerenciar Clientes',
                 'admin-tarologos': 'Gerenciar Tarólogos',
                 'admin-history': 'Histórico de Consultas',
+                'admin-cashflow': 'Fluxo de Caixa e Contabilidade',
                 'tarologo-consultas': 'Minha Lista de Consultas',
                 'tarologo-chat': 'Sala de Atendimento',
                 'tarologo-history': 'Meu Histórico',
@@ -1127,6 +1187,7 @@
             if (viewId === 'admin-clients') initAdminClients();
             if (viewId === 'admin-tarologos') initAdminTarologos();
             if (viewId === 'admin-history') initAdminHistory();
+            if (viewId === 'admin-cashflow') initAdminCashFlow();
             if (viewId === 'tarologo-consultas') initTarologoConsultas();
             if (viewId === 'tarologo-chat') initTarologoChat();
             if (viewId === 'tarologo-history') initTarologoHistory();
@@ -1232,6 +1293,178 @@
             chatHTML += '</div>';
 
             document.getElementById('modal-body').innerHTML = chatHTML;
+        }
+
+        async function initAdminCashFlow() {
+            const tableBody = document.getElementById('admin-cashflow-table');
+            if (!tableBody) return;
+
+            tableBody.innerHTML = '<tr><td colspan="5" class="text-center p-8"><i class="fas fa-spinner fa-spin text-2xl text-indigo-600"></i></td></tr>';
+
+            // Recarrega dados de pagamentos e consultas para contabilidade
+            let payments = [];
+            try {
+                const { data: pData, error: pError } = await supabaseClient.from('pagamentos').select('*').order('created_at', { ascending: false });
+                if (!pError) payments = pData || [];
+            } catch (e) { console.warn(e); }
+
+            const { data: consultations } = await supabaseClient.from('consultas').select('*').eq('status', 'finished');
+            
+            store.payments = payments;
+            store.consultations = consultations || [];
+
+            // Filtra por mês atual para o resumo
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            const monthlyPayments = store.payments.filter(p => {
+                const d = new Date(p.created_at);
+                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+            });
+
+            const monthlyConsultations = store.consultations.filter(c => {
+                const d = new Date(c.created_at);
+                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+            });
+
+            // Cálculos
+            const totalRevenue = monthlyPayments.reduce((acc, p) => acc + (p.amount || 0), 0);
+            const totalCommissions = monthlyConsultations.reduce((acc, c) => {
+                const start = new Date(c.created_at);
+                const end = new Date(c.ended_at);
+                const duracao = Math.max(0, Math.round((end - start) / (1000 * 60)));
+                return acc + (duracao * 0.50);
+            }, 0);
+            const netProfit = totalRevenue - totalCommissions;
+
+            // Atualiza Cards de Resumo
+            const revEl = document.getElementById('cashflow-total-revenue');
+            const comEl = document.getElementById('cashflow-total-commissions');
+            const netEl = document.getElementById('cashflow-net-profit');
+
+            if (revEl) revEl.textContent = `R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            if (comEl) comEl.textContent = `R$ ${totalCommissions.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            if (netEl) netEl.textContent = `R$ ${netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+            // Renderiza Tabela
+            if (store.payments.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center p-8 text-gray-500 italic">Nenhum pagamento registrado. Verifique se a tabela "pagamentos" existe.</td></tr>';
+                return;
+            }
+
+            tableBody.innerHTML = store.payments.map(p => {
+                const client = store.clients.find(c => c.id === p.client_id);
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${new Date(p.created_at).toLocaleString('pt-BR')}</td>
+                        <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-800">${client ? client.name : 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">R$ ${p.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${p.credits_added} min</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase bg-blue-100 text-blue-700">${p.method}</span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function openNewPaymentModal() {
+            const modalHtml = `
+                <div id="payment-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div class="bg-indigo-600 p-4 text-white flex justify-between items-center">
+                            <h3 class="font-bold flex items-center gap-2"><i class="fas fa-cash-register"></i> Novo Lançamento</h3>
+                            <button onclick="closePaymentModal()" class="text-white/80 hover:text-white"><i class="fas fa-times"></i></button>
+                        </div>
+                        <form id="payment-form" class="p-6 space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Selecionar Cliente</label>
+                                <select id="payment-client-id" class="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required>
+                                    <option value="">Selecione um cliente...</option>
+                                    ${store.clients.map(c => `<option value="${c.id}">${c.name} (Saldo: ${c.balance || 0} min)</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Valor (R$)</label>
+                                    <input type="number" id="payment-amount" step="0.01" class="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="0,00" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Créditos (Minutos)</label>
+                                    <input type="number" id="payment-credits" class="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="0" required>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Forma de Pagamento</label>
+                                <select id="payment-method" class="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required>
+                                    <option value="DÉBITO">Cartão de Débito</option>
+                                    <option value="CRÉDITO">Cartão de Crédito</option>
+                                    <option value="LINK">Link de Pagamento</option>
+                                    <option value="TRANSFERÊNCIA">Transferência / PIX</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-lg transition-all active:scale-95 mt-2">
+                                CONFIRMAR LANÇAMENTO
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            document.getElementById('payment-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const btn = e.target.querySelector('button[type="submit"]');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processando...';
+
+                const clientId = document.getElementById('payment-client-id').value;
+                const amount = parseFloat(document.getElementById('payment-amount').value);
+                const credits = parseInt(document.getElementById('payment-credits').value);
+                const method = document.getElementById('payment-method').value;
+
+                try {
+                    // 1. Atualiza Saldo do Cliente
+                    const client = store.clients.find(c => c.id === clientId);
+                    const newBalance = (client.balance || 0) + credits;
+                    
+                    const { error: clientError } = await supabaseClient
+                        .from('clients')
+                        .update({ balance: newBalance })
+                        .eq('id', clientId);
+
+                    if (clientError) throw clientError;
+
+                    // 2. Registra Pagamento no Fluxo de Caixa
+                    const { error: paymentError } = await supabaseClient
+                        .from('pagamentos')
+                        .insert({
+                            client_id: clientId,
+                            amount: amount,
+                            credits_added: credits,
+                            method: method,
+                            created_at: new Date().toISOString()
+                        });
+
+                    if (paymentError) throw paymentError;
+
+                    alert('Pagamento lançado com sucesso e créditos adicionados ao cliente!');
+                    closePaymentModal();
+                    await loadInitialData();
+                    initAdminCashFlow();
+                } catch (err) {
+                    console.error("Erro ao lançar pagamento:", err);
+                    alert("Erro ao processar: " + (err.message || "Verifique se a tabela 'pagamentos' existe no seu banco de dados."));
+                    btn.disabled = false;
+                    btn.textContent = 'CONFIRMAR LANÇAMENTO';
+                }
+            };
+        }
+
+        function closePaymentModal() {
+            const modal = document.getElementById('payment-modal');
+            if (modal) modal.remove();
         }
 
         async function initTarologoHistory() {
