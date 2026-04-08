@@ -739,11 +739,14 @@
             }
         }
 
-        // Handle window closing to set offline
-        window.addEventListener('beforeunload', () => {
+        // Handle window closing to set offline and finish active consultations
+        window.addEventListener('beforeunload', (event) => {
             if (store.currentUser && store.currentUser.role === 'tarologo') {
-                // Use navigator.sendBeacon or a synchronous-like update if possible, 
-                // but Supabase is async. Best effort here.
+                if (store.activeConsultation) {
+                    // Tenta finalizar a consulta se estiver saindo com uma ativa
+                    // Como é async, pode não terminar, mas o Supabase é rápido.
+                    finishConsultation();
+                }
                 updateUserStatus('offline');
             }
         });
@@ -1090,6 +1093,16 @@
         });
 
         async function renderView(viewId) {
+            // Finaliza consulta se sair do chat (conforme solicitado pelo usuário)
+            if (store.currentView === 'tarologo-chat' && viewId !== 'tarologo-chat' && store.activeConsultation) {
+                if (confirm('Você está saindo da sala de atendimento. Deseja finalizar esta consulta agora?')) {
+                    await finishConsultation('Atendimento finalizado ao sair da sala.');
+                } else {
+                    // Cancela a mudança de view se o usuário não quiser finalizar
+                    return;
+                }
+            }
+
             store.currentView = viewId;
             const template = document.getElementById(`view-${viewId}`);
             const content = document.getElementById('view-content');
@@ -2449,8 +2462,10 @@
             clearInterval(store.timerInterval);
             
             const consult = store.activeConsultation;
+            if (!consult) return;
+
             const remainingSeconds = consult.remaining_seconds;
-            const remainingMinutes = Math.floor(remainingSeconds / 60); // Arredonda para baixo os minutos restantes
+            const remainingMinutes = Math.floor(remainingSeconds / 60); 
             const totalMinutesOriginal = consult.minutes;
             const usedMinutes = totalMinutesOriginal - remainingMinutes;
 
@@ -2469,24 +2484,25 @@
                     }
                 }
 
-                // 2. Finalizar a consulta e atualizar o tempo real utilizado (para ganhos do tarólogo)
-                // Garantimos que o tempo usado seja no mínimo 0
+                // 2. Finalizar a consulta no Banco de Dados
                 const finalUsedMinutes = usedMinutes > 0 ? usedMinutes : 0;
                 
-                await supabaseClient.from('consultas').update({ 
+                const { error } = await supabaseClient.from('consultas').update({ 
                     status: 'finished', 
                     remaining_seconds: 0,
                     minutes: finalUsedMinutes,
                     ended_at: new Date().toISOString()
                 }).eq('id', consult.id);
 
-                alert(`${msg}\n\nTempo restante (${remainingMinutes} min) devolvido ao cliente.`);
+                if (error) throw error;
+
+                if (msg) alert(`${msg}\n\nTempo restante (${remainingMinutes} min) devolvido ao cliente.`);
                 
                 // Volta status do tarólogo para ONLINE automaticamente ao finalizar
                 updateUserStatus('online');
             } catch (err) {
                 console.error("Erro ao finalizar consulta:", err);
-                alert("Erro ao salvar finalização da consulta.");
+                if (msg) alert("Erro ao salvar finalização da consulta: " + err.message);
             }
             
             store.activeConsultation = null;
