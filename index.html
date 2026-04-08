@@ -321,31 +321,6 @@
 
     <template id="view-tarologo-consultas">
         <div class="space-y-6">
-            <!-- Novo Card de Status (Destaque) -->
-            <div class="bg-white rounded-xl shadow-sm border border-indigo-100 p-6 flex flex-col md:flex-row items-center justify-between gap-6">
-                <div class="flex items-center gap-4">
-                    <div class="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600">
-                        <i class="fas fa-user-circle text-3xl"></i>
-                    </div>
-                    <div>
-                        <h4 class="text-lg font-bold text-gray-800">Seu Status de Atendimento</h4>
-                        <div class="flex items-center gap-2 mt-1">
-                            <span id="card-status-indicator" class="w-4 h-4 rounded-full bg-gray-500"></span>
-                            <span id="card-status-text" class="text-sm font-bold text-gray-600 uppercase">Offline</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div id="card-status-btns" class="flex flex-wrap gap-3">
-                    <button onclick="updateUserStatus('online')" data-status="online" class="flex items-center gap-2 px-6 py-3 rounded-lg border border-green-200 hover:bg-green-50 transition-all font-bold text-green-700 text-sm">
-                        <span class="w-2 h-2 rounded-full bg-green-500"></span> Online
-                    </button>
-                    <button onclick="updateUserStatus('busy')" data-status="busy" class="flex items-center gap-2 px-6 py-3 rounded-lg border border-red-200 hover:bg-red-50 transition-all font-bold text-red-700 text-sm">
-                        <span class="w-2 h-2 rounded-full bg-red-500"></span> Ocupado
-                    </button>
-                </div>
-            </div>
-
             <!-- Consultas em Andamento (Novo Estilo da Foto) -->
             <div id="active-consultations-section" class="bg-white rounded-lg shadow-sm border border-blue-200 hidden">
                 <div class="bg-blue-600 text-white p-3 rounded-t-lg">
