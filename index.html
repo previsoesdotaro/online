@@ -2110,11 +2110,10 @@
                             <div class="text-gray-900">${u.name}</div>
                             <div class="text-xs text-gray-400">@${u.username}</div>
                         </td>
-                        <td class="px-6 py-4 text-xs space-y-1">
-                            <div class="flex items-center gap-2 text-gray-600"><i class="fas fa-envelope w-4"></i> ${u.email || '-'}</div>
-                            <div class="flex items-center gap-2 text-gray-600"><i class="fas fa-phone w-4"></i> ${u.phone || '-'}</div>
-                            <div class="flex items-center gap-2 text-indigo-600 font-medium"><i class="fas fa-money-bill-wave w-4"></i> PIX: ${u.pix || '-'}</div>
-                            <div class="flex items-center gap-2 text-orange-600 font-medium"><i class="fas fa-clock w-4"></i> ${u.work_hours || '-'}</div>
+                        <td class="px-6 py-4 text-xs">
+                            <button onclick="openEditTarologoInfoModal('${u.id}')" class="bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg border border-indigo-100 hover:bg-indigo-100 transition-all font-bold flex items-center gap-2">
+                                <i class="fas fa-info-circle"></i> Ver / Editar Info
+                            </button>
                         </td>
                         <td class="px-6 py-4 text-xs text-center">
                             <div class="text-gray-900 font-bold">Meta: R$ ${(u.monthly_goal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
@@ -2133,6 +2132,98 @@
                     </tr>
                 `;
             }).join('');
+        }
+
+        function openEditTarologoInfoModal(tarologoId) {
+            const u = store.users.find(user => user.id === tarologoId);
+            if (!u) return;
+
+            openModal('Editar Informações do Tarólogo', `
+                <form id="edit-tarologo-info-form" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium mb-1 text-gray-700">Nome Completo</label>
+                            <input type="text" id="edit-t-name" class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" required value="${u.name || ''}">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">E-mail</label>
+                            <input type="email" id="edit-t-email" class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" required value="${u.email || ''}">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">Telefone / WhatsApp</label>
+                            <input type="text" id="edit-t-phone" class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${u.phone || ''}">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">Chave PIX</label>
+                            <input type="text" id="edit-t-pix" class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${u.pix || ''}">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">Horário de Trabalho</label>
+                            <input type="text" id="edit-t-hours" class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${u.work_hours || ''}">
+                        </div>
+                        <div class="md:col-span-2 border-t pt-4 mt-2">
+                            <h4 class="text-xs font-bold text-gray-400 uppercase mb-3">Dados de Acesso</h4>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">Usuário</label>
+                            <input type="text" id="edit-t-user" class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" required value="${u.username || ''}">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">Senha</label>
+                            <input type="password" id="edit-t-pass" class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" required value="${u.password || ''}">
+                        </div>
+                    </div>
+                    <div class="flex gap-3 mt-6">
+                        <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl transition-all">
+                            CANCELAR
+                        </button>
+                        <button type="submit" id="save-edit-t-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-100 transition-all active:scale-95">
+                            SALVAR ALTERAÇÕES
+                        </button>
+                    </div>
+                </form>
+            `);
+
+            document.getElementById('edit-tarologo-info-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const btn = document.getElementById('save-edit-t-btn');
+                const tName = document.getElementById('edit-t-name').value.trim();
+                const tEmail = document.getElementById('edit-t-email').value.trim();
+                const tPhone = document.getElementById('edit-t-phone').value.trim();
+                const tPix = document.getElementById('edit-t-pix').value.trim();
+                const tHours = document.getElementById('edit-t-hours').value.trim();
+                const tUser = document.getElementById('edit-t-user').value.trim();
+                const tPass = document.getElementById('edit-t-pass').value.trim();
+
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Salvando...';
+
+                try {
+                    const { error } = await supabaseClient.from('users').update({ 
+                        name: tName, 
+                        email: tEmail,
+                        phone: tPhone,
+                        pix: tPix,
+                        work_hours: tHours,
+                        username: tUser, 
+                        password: tPass
+                    }).eq('id', tarologoId);
+
+                    if (error) {
+                        alert('Erro ao atualizar informações: ' + error.message);
+                    } else {
+                        alert('Informações atualizadas com sucesso!');
+                        closeModal();
+                        await loadInitialData();
+                        renderAdminTarologosTable();
+                    }
+                } catch (err) {
+                    alert('Erro inesperado: ' + err.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'SALVAR ALTERAÇÕES';
+                }
+            };
         }
 
         function openEditGoalsModal(tarologoId) {
